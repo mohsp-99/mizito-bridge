@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Mizito Data Viewer</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #171c22; --panel2: #1d242c; --line: #2a323c;
+    --text: #e6edf3; --muted: #8b97a4; --accent: #4f9cf9; --good: #3fb950; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: "Vazirmatn", "Segoe UI", Tahoma, system-ui, sans-serif; font-size: 14px;
+  }
+  header {
+    padding: 14px 20px; background: var(--panel); border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap; position: sticky; top: 0; z-index: 5;
+  }
+  header h1 { font-size: 17px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  select, button {
+    background: var(--panel2); color: var(--text); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 10px; font: inherit; cursor: pointer;
+  }
+  .stats { display: flex; gap: 10px; margin-inline-start: auto; flex-wrap: wrap; }
+  .stat { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 6px 12px; text-align: center; }
+  .stat b { display: block; font-size: 18px; }
+  .stat span { color: var(--muted); font-size: 11px; }
+  nav { display: flex; gap: 4px; padding: 10px 20px 0; background: var(--panel); }
+  nav .tab { border: none; border-bottom: 2px solid transparent; border-radius: 0; background: none; color: var(--muted); padding: 8px 14px; }
+  nav .tab.active { color: var(--text); border-bottom-color: var(--accent); }
+  main { padding: 20px; }
+  .board-cols { display: flex; gap: 14px; align-items: flex-start; overflow-x: auto; padding-bottom: 12px; }
+  .col { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; min-width: 300px; max-width: 340px; flex: 0 0 auto; }
+  .col-head { padding: 10px 14px; border-bottom: 1px solid var(--line); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .col-head .dot { width: 10px; height: 10px; border-radius: 50%; }
+  .col-head .count { margin-inline-start: auto; color: var(--muted); font-weight: 400; font-size: 12px; }
+  .col-body { padding: 10px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 230px); overflow-y: auto; }
+  .card { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; cursor: pointer; }
+  .card:hover { border-color: var(--accent); }
+  .card.done { opacity: 0.62; }
+  .card .title { font-weight: 600; line-height: 1.5; }
+  .card.done .title { text-decoration: line-through; }
+  .card .row { display: flex; align-items: center; gap: 6px; margin-top: 8px; flex-wrap: wrap; color: var(--muted); font-size: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; background: var(--bg); border: 1px solid var(--line); border-radius: 20px; padding: 2px 9px; font-size: 12px; }
+  .label-chip { color: #fff; border: none; }
+  .avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; }
+  .badge { font-size: 11px; padding: 1px 8px; border-radius: 20px; }
+  .badge.done { background: rgba(63,185,80,.15); color: var(--good); }
+  .badge.open { background: rgba(79,156,249,.15); color: var(--accent); }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: start; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  tr:hover td { background: var(--panel); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+  .pcard { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  .muted { color: var(--muted); }
+  /* modal */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.55); display: none; align-items: center; justify-content: center; z-index: 20; padding: 20px; }
+  .modal-bg.open { display: flex; }
+  .modal { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; max-width: 640px; width: 100%; max-height: 86vh; overflow-y: auto; padding: 20px 22px; }
+  .modal h2 { margin: 0 0 4px; font-size: 18px; }
+  .modal .notes { white-space: pre-wrap; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-top: 12px; line-height: 1.7; }
+  .kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; margin-top: 14px; }
+  .kv .k { color: var(--muted); }
+  .check { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+  .empty { color: var(--muted); padding: 40px; text-align: center; }
+  /* chats */
+  .chat-layout { display: grid; grid-template-columns: 260px 1fr; gap: 16px; align-items: start; }
+  .dialog-list { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; position: sticky; top: 120px; }
+  .dialog-item { padding: 11px 14px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  .dialog-item:hover { background: var(--panel2); }
+  .dialog-item.active { background: var(--panel2); border-inline-start: 3px solid var(--accent); }
+  .dialog-item .t { font-weight: 600; }
+  .dialog-item .m { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .thread { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .msg { display: flex; gap: 10px; align-items: flex-start; }
+  .msg .who { font-size: 12px; color: var(--muted); margin-bottom: 3px; display: flex; gap: 8px; }
+  .msg .bubble { background: var(--panel2); border: 1px solid var(--line); border-radius: 12px; padding: 9px 12px; max-width: 78%; line-height: 1.7; white-space: pre-wrap; word-break: break-word; }
+  .msg.task .bubble { border-inline-start: 3px solid var(--accent); cursor: pointer; max-width: 78%; }
+  .msg.task .bubble:hover { border-color: var(--accent); }
+  .msg.service { justify-content: center; }
+  .msg.service .bubble { background: none; border: none; color: var(--muted); font-size: 12px; text-align: center; padding: 2px; }
+  .msg .date { font-size: 11px; color: var(--muted); }
+  .comment-box { margin-top: 14px; background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+  .comment-box .ch { color: var(--muted); font-size: 12px; margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+  .comment-box .ct { white-space: pre-wrap; line-height: 1.7; }
+  pre.raw { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 14px; overflow: auto; max-height: 70vh; direction: ltr; text-align: left; font-size: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1 id="wsName">Mizito Data Viewer</h1>
+    <div class="sub" id="wsSub">—</div>
+  </div>
+  <select id="wsSelect" title="Workspace"></select>
+  <div class="stats" id="stats"></div>
+</header>
+<nav id="tabs">
+  <button class="tab active" data-tab="board">برد وظایف</button>
+  <button class="tab" data-tab="tasks">همه وظایف</button>
+  <button class="tab" data-tab="chats">گفتگوها</button>
+  <button class="tab" data-tab="members">اعضا</button>
+  <button class="tab" data-tab="projects">پروژه‌ها</button>
+  <button class="tab" data-tab="raw">داده خام</button>
+</nav>
+<main id="main"><div class="empty">در حال بارگذاری…</div></main>
+
+<div class="modal-bg" id="modalBg"><div class="modal" id="modal"></div></div>
+
+<script>
+const $ = (s, r=document) => r.querySelector(s);
+const el = (t, attrs={}, kids=[]) => {
+  const e = document.createElement(t);
+  for (const [k,v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k === 'text') e.textContent = v;
+    else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+    else if (v != null) e.setAttribute(k, v);
+  }
+  for (const kid of [].concat(kids)) if (kid) e.append(kid.nodeType ? kid : document.createTextNode(kid));
+  return e;
+};
+const COLORS = { green2:'#3fb950', green:'#3fb950', yellow:'#d29922', blue:'#4f9cf9',
+  orange:'#db6d28', 'red-dark':'#b62324', red:'#f85149', 'light-blue':'#56b6e6', purple:'#a371f7', gray:'#8b97a4' };
+const color = (c) => COLORS[c] || c || '#8b97a4';
+const fa = (n) => (n==null?'—':String(n));
+function jdate(s){ if(!s) return '—'; try { return new Date(s).toLocaleDateString('fa-IR', {year:'numeric',month:'short',day:'numeric'}); } catch { return s; } }
+
+const state = { ws: null, data: {}, maps: {} };
+
+async function api(p){ const r = await fetch(p); if(!r.ok) throw new Error(p+' '+r.status); return r.json(); }
+async function wsFile(name){ return api(`/api/ws/${encodeURIComponent(state.ws)}/${name}`); }
+
+async function boot(){
+  const list = await api('/api/workspaces');
+  const sel = $('#wsSelect');
+  sel.innerHTML = '';
+  if (!list.length){ $('#main').innerHTML = '<div class="empty">هیچ داده‌ای کرال نشده. ابتدا <code>npm run crawl</code> را اجرا کنید.</div>'; return; }
+  for (const w of list) sel.append(el('option', { value: w.dir, text: (w.manifest.workspace?.name||w.dir) }));
+  sel.onchange = () => loadWorkspace(sel.value);
+  await loadWorkspace(list[0].dir);
+}
+
+async function loadWorkspace(dir){
+  state.ws = dir;
+  $('#main').innerHTML = '<div class="empty">در حال بارگذاری…</div>';
+  const [manifest, tasks, members, projects, labels, comments, fileIndex] = await Promise.all([
+    wsFile('manifest.json'), wsFile('tasks.json'), wsFile('members.json'),
+    wsFile('projects.json'), wsFile('labels.json'),
+    wsFile('comments.json').catch(() => []),
+    wsFile('files/index.json').catch(() => []),
+  ]);
+  state.data = { manifest, tasks, members, projects, labels, comments, fileIndex };
+
+  // lookup maps
+  const mUser = new Map();
+  for (const u of (members.users||[])) mUser.set(u._id, u);
+  const mBoard = new Map();
+  for (const p of (projects.projects||[])) for (const b of (p.kanban_boards||[])) mBoard.set(b._id, b);
+  const mLabel = new Map();
+  for (const l of (labels.labels||[])) mLabel.set(l._id, l);
+  // task lookups so chat messages can link to their task
+  const mTaskById = new Map();
+  const mTaskByMsg = new Map();
+  for (const t of (tasks||[])) {
+    mTaskById.set(t._id, t);
+    if (t.dialog_message) mTaskByMsg.set(t.dialog_message, t);
+    if (t._messageId) mTaskByMsg.set(t._messageId, t);
+  }
+  // full comment threads keyed by task id
+  const mComments = new Map();
+  for (const entry of (comments||[])) mComments.set(entry.task_id, entry.comments||[]);
+  // downloaded files: by id, and grouped by task
+  const mFileById = new Map();
+  const mFilesByTask = new Map();
+  for (const f of (fileIndex||[])) {
+    mFileById.set(f.id, f);
+    if (f.task_id) { if (!mFilesByTask.has(f.task_id)) mFilesByTask.set(f.task_id, []); mFilesByTask.get(f.task_id).push(f); }
+  }
+  state.maps = { mUser, mBoard, mLabel, mTaskById, mTaskByMsg, mComments, mFileById, mFilesByTask };
+
+  $('#wsName').textContent = manifest.workspace?.name || dir;
+  $('#wsSub').textContent = `کرال‌شده در ${new Date(manifest.crawledAt).toLocaleString('fa-IR')}`;
+  const c = manifest.counts || {};
+  $('#stats').innerHTML = '';
+  for (const [k,lbl] of [['tasks','وظیفه'],['members','عضو'],['projects','پروژه'],['dialogs','گفتگو'],['messages','پیام']])
+    $('#stats').append(el('div',{class:'stat'},[el('b',{text:fa(c[k])}), el('span',{text:lbl})]));
+
+  showTab(currentTab);
+}
+
+let currentTab = 'board';
+$('#tabs').addEventListener('click', (e) => {
+  const t = e.target.closest('.tab'); if(!t) return;
+  currentTab = t.dataset.tab;
+  for (const b of document.querySelectorAll('.tab')) b.classList.toggle('active', b===t);
+  showTab(currentTab);
+});
+
+function userName(id){ const u = state.maps.mUser.get(id); return u ? `${u.first_name||''} ${u.last_name||''}`.trim() || u.email || id : id; }
+function initials(id){ const n = userName(id); return (n||'?').trim().slice(0,2); }
+function avatar(id){ return el('span',{class:'avatar', title:userName(id)}, initials(id)); }
+
+// URL to a downloaded file (path is a forward-slash relative path under data/<ws>/).
+function fileUrl(p){ return '/api/ws/' + encodeURIComponent(state.ws) + '/' + p.split('/').map(encodeURIComponent).join('/'); }
+const fmtSize = (n) => n==null ? '' : (n>1048576 ? (n/1048576).toFixed(1)+' MB' : Math.max(1,Math.round(n/1024))+' KB');
+// Render a file as a download link if it's been downloaded, else a plain name.
+function fileChip(entry){
+  const label = `📎 ${entry.name}${entry.size!=null?'  ('+fmtSize(entry.size)+')':''}`;
+  if (entry && entry.path) return el('a',{class:'chip', href:fileUrl(entry.path), target:'_blank', title:'دانلود/مشاهده', text:label});
+  return el('span',{class:'chip', title:'دانلود نشده — npm run files', text:label + ' ⬇︎?'});
+}
+
+function taskCard(t){
+  const card = el('div',{class:'card'+(t.completed?' done':''), onclick:()=>openTask(t)});
+  card.append(el('div',{class:'title', text:t.title||'(بدون عنوان)'}));
+  const row = el('div',{class:'row'});
+  row.append(el('span',{class:'badge '+(t.completed?'done':'open'), text: t.completed?'انجام‌شده':'باز'}));
+  for (const a of (t.assignee||[]).slice(0,4)) row.append(avatar(a));
+  for (const lid of (t.labels||[])) { const l = state.maps.mLabel.get(lid); if(l) row.append(el('span',{class:'chip label-chip', style:`background:${color(l.color)}`, text:l.title})); }
+  if (t.has_deadline && t.deadline) row.append(el('span',{class:'chip', text:'⏰ '+jdate(t.deadline)}));
+  if (Array.isArray(t.checklist) && t.checklist.length) row.append(el('span',{class:'chip', text:`☑ ${t.checklist.filter(x=>x.checked).length}/${t.checklist.length}`}));
+  if (t.has_comments) row.append(el('span',{class:'chip', title:'دارای گفتگو', text:'💬'}));
+  card.append(row);
+  return card;
+}
+
+function showTab(tab){
+  const main = $('#main'); main.innerHTML = '';
+  const { tasks, members, projects } = state.data;
+  if (tab === 'board') return renderBoard(main, tasks);
+  if (tab === 'tasks') return renderTaskTable(main, tasks);
+  if (tab === 'chats') return renderChats(main);
+  if (tab === 'members') return renderMembers(main, members);
+  if (tab === 'projects') return renderProjects(main, projects);
+  if (tab === 'raw') return renderRaw(main);
+}
+
+function renderBoard(main, tasks){
+  const groups = new Map(); // boardId -> tasks
+  for (const t of tasks){ const b = t.kanban_board || 'null'; if(!groups.has(b)) groups.set(b, []); groups.get(b).push(t); }
+  const cols = el('div',{class:'board-cols'});
+  // order boards by their definition; unknown/no-board last
+  const ordered = [...state.maps.mBoard.keys()].filter(id=>groups.has(id));
+  for (const id of groups.keys()) if (!ordered.includes(id)) ordered.push(id);
+  for (const bid of ordered){
+    const b = state.maps.mBoard.get(bid);
+    const list = (groups.get(bid)||[]).sort((a,b)=> (a.completed?1:0)-(b.completed?1:0));
+    const col = el('div',{class:'col'});
+    col.append(el('div',{class:'col-head'},[
+      el('span',{class:'dot', style:`background:${color(b?.color)}`}),
+      el('span',{text: b?.title || 'بدون برد'}),
+      el('span',{class:'count', text: list.length}),
+    ]));
+    const body = el('div',{class:'col-body'});
+    for (const t of list) body.append(taskCard(t));
+    col.append(body); cols.append(col);
+  }
+  main.append(cols);
+}
+
+function renderTaskTable(main, tasks){
+  const tbl = el('table');
+  tbl.append(el('thead',{},el('tr',{},['عنوان','برد','وضعیت','مسئول','مهلت','ساخته‌شده'].map(h=>el('th',{text:h})))));
+  const tb = el('tbody');
+  for (const t of tasks.slice().sort((a,b)=>(a.completed?1:0)-(b.completed?1:0))){
+    const b = state.maps.mBoard.get(t.kanban_board);
+    const tr = el('tr',{style:'cursor:pointer', onclick:()=>openTask(t)});
+    tr.append(el('td',{},el('b',{text:t.title||'—'})));
+    tr.append(el('td',{},b?el('span',{class:'chip', html:`<span class="dot" style="width:8px;height:8px;border-radius:50%;background:${color(b.color)}"></span>${b.title}`}):'—'));
+    tr.append(el('td',{},el('span',{class:'badge '+(t.completed?'done':'open'), text:t.completed?'انجام‌شده':'باز'})));
+    tr.append(el('td',{text:(t.responsible||t.assignee||[]).map(userName).join('، ')||'—'}));
+    tr.append(el('td',{text:t.has_deadline?jdate(t.deadline):'—'}));
+    tr.append(el('td',{text:jdate(t.created_at)}));
+    tb.append(tr);
+  }
+  tbl.append(tb); main.append(tbl);
+}
+
+function renderMembers(main, members){
+  const tbl = el('table');
+  tbl.append(el('thead',{},el('tr',{},['','نام','ایمیل','نقش','وضعیت'].map(h=>el('th',{text:h})))));
+  const tb = el('tbody');
+  for (const u of (members.users||[])){
+    const tr = el('tr');
+    tr.append(el('td',{},avatar(u._id)));
+    tr.append(el('td',{},el('b',{text:`${u.first_name||''} ${u.last_name||''}`.trim()||'—'})));
+    tr.append(el('td',{class:'muted', text:u.email||'—'}));
+    tr.append(el('td',{text: u.role===1?'مدیر':(u.invited?'دعوت‌شده':'عضو')}));
+    tr.append(el('td',{class:'muted', text: u.deleted?'حذف‌شده':'فعال'}));
+    tb.append(tr);
+  }
+  tbl.append(tb); main.append(tbl);
+}
+
+function renderProjects(main, projects){
+  const grid = el('div',{class:'grid'});
+  for (const p of (projects.projects||[])){
+    const card = el('div',{class:'pcard'});
+    card.append(el('div',{},el('b',{text:p.title})));
+    card.append(el('div',{class:'muted', style:'margin:6px 0', text:`${(p.kanban_boards||[]).length} برد • ${p.is_advanced?'پیشرفته':'ساده'}${p.archived?' • بایگانی':''}`}));
+    const boards = el('div',{class:'row', style:'display:flex;flex-wrap:wrap;gap:6px'});
+    for (const b of (p.kanban_boards||[])) boards.append(el('span',{class:'chip', html:`<span style="width:8px;height:8px;border-radius:50%;background:${color(b.color)}"></span> ${b.title}`}));
+    card.append(boards); grid.append(card);
+  }
+  main.append(grid);
+}
+
+async function renderRaw(main){
+  const files = ['manifest.json','tasks.json','members.json','projects.json','project-summaries.json','labels.json','dashboard.json','dialogs.json','workspace.json'];
+  const sel = el('select');
+  for (const f of files) sel.append(el('option',{value:f,text:f}));
+  const pre = el('pre',{class:'raw'});
+  const load = async () => { pre.textContent = JSON.stringify(await wsFile(sel.value), null, 2); };
+  sel.onchange = load;
+  main.append(el('div',{style:'margin-bottom:12px'}, sel)); main.append(pre); load();
+}
+
+// ---- Chats tab: each dialog as a chronological thread ----
+async function renderChats(main){
+  const dialogs = (state.data.manifest.dialogs || []).filter(d => d.messages > 0);
+  if (!dialogs.length) { main.append(el('div',{class:'empty',text:'گفتگویی ثبت نشده.'})); return; }
+  const layout = el('div',{class:'chat-layout'});
+  const list = el('div',{class:'dialog-list'});
+  const thread = el('div',{class:'thread'},el('div',{class:'empty',text:'یک گفتگو را انتخاب کنید.'}));
+  layout.append(list, thread);
+  main.append(layout);
+
+  const items = [];
+  dialogs.sort((a,b)=>b.messages-a.messages).forEach((d, i) => {
+    const item = el('div',{class:'dialog-item'+(i===0?' active':''), onclick:()=>select(d, item)});
+    item.append(el('div',{class:'t', text: d.title || (d.isProjectGroup?'گروه پروژه':'گفتگو')}));
+    item.append(el('div',{class:'m', text:`${d.messages} پیام${d.taskMessages?` • ${d.taskMessages} وظیفه`:''}`}));
+    items.push(item); list.append(item);
+  });
+
+  async function select(d, item){
+    for (const it of items) it.classList.toggle('active', it===item);
+    thread.innerHTML = '<div class="empty">در حال بارگذاری…</div>';
+    let data;
+    try { data = await wsFile(`chats/${d.id}.json`); }
+    catch { thread.innerHTML = '<div class="empty">بارگذاری ناموفق.</div>'; return; }
+    renderThread(thread, data, d);
+  }
+  if (dialogs.length) select(dialogs[0], items[0]);
+}
+
+function renderThread(thread, data, d){
+  thread.innerHTML = '';
+  thread.append(el('div',{style:'font-weight:600;margin-bottom:6px'}, data.info?.title || d.title || 'گفتگو'));
+  const msgs = (data.messages||[]).slice().sort((a,b)=> new Date(a.date) - new Date(b.date));
+  if (!msgs.length) { thread.append(el('div',{class:'empty',text:'پیامی نیست.'})); return; }
+  const seenTasks = new Set();
+  for (const m of msgs) thread.append(renderMessage(m, seenTasks));
+}
+
+function actionText(m){
+  const a = m.action || {};
+  const who = (a.users||[]).map(userName).join('، ');
+  if (a._ === 'messageActionChatAddUser') return `➕ ${who} به گروه اضافه شد`;
+  if (a._ === 'messageActionChatDeleteUser') return `➖ ${who} از گروه حذف شد`;
+  if (a._ === 'messageActionChatCreate') return '🏷️ گروه ایجاد شد';
+  if (a._ === 'messageActionChatEditPhoto') return '🖼️ عکس گروه تغییر کرد';
+  return a._ ? a._.replace('messageActionChat','') : 'رویداد';
+}
+
+function renderMessage(m, seenTasks){
+  // service / system event
+  if (m._ === 'messageService' || m.action){
+    return el('div',{class:'msg service'}, el('div',{class:'bubble', text:`${actionText(m)} • ${jdate(m.date)}`}));
+  }
+  // task card
+  const task = (m.media && m.media._ === 'messageMediaTask' && m.media.task)
+    ? (state.maps.mTaskById.get(m.media.task._id) || m.media.task) : null;
+  if (task){
+    // A task is re-posted to the dialog on every edit. Show the full card the
+    // first time it appears; render later updates as a compact one-liner.
+    if (seenTasks && seenTasks.has(task._id)){
+      return el('div',{class:'msg service'}, el('div',{class:'bubble', html:`🗂️ <b>${userName(m.from)}</b> وظیفهٔ «${task.title||'—'}» را به‌روزرسانی کرد • ${jdate(m.date)}`}));
+    }
+    if (seenTasks) seenTasks.add(task._id);
+    const b = state.maps.mBoard.get(task.kanban_board);
+    const wrap = el('div',{class:'msg task'});
+    const col = el('div',{style:'flex:1'});
+    col.append(el('div',{class:'who'},[avatar(m.from), el('span',{text:userName(m.from)}), el('span',{class:'date',text:jdate(m.date)})]));
+    const bubble = el('div',{class:'bubble', onclick:()=>openTask(task)});
+    bubble.append(el('div',{style:'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:4px'},[
+      el('span',{class:'badge '+(task.completed?'done':'open'), text:task.completed?'انجام‌شده':'باز'}),
+      b? el('span',{class:'chip', html:`<span style="width:8px;height:8px;border-radius:50%;background:${color(b.color)}"></span> ${b.title}`}) : null,
+      el('span',{text:'🗂️ وظیفه', style:'color:var(--muted);font-size:11px'}),
+    ]));
+    bubble.append(el('div',{style:'font-weight:600', text:task.title||'(بدون عنوان)'}));
+    if (task.has_comments && task.last_comment?.comment) bubble.append(el('div',{class:'muted',style:'margin-top:4px;font-size:12px', text:'💬 '+task.last_comment.comment.slice(0,90)+(task.last_comment.comment.length>90?'…':'')}));
+    col.append(bubble); wrap.append(col);
+    return wrap;
+  }
+  // plain text / media message
+  const text = m.message || m.text || m.body || (m.media && (m.media.caption || (m.media._||'').replace('messageMedia',''))) || '';
+  const wrap = el('div',{class:'msg'});
+  const col = el('div',{style:'flex:1'});
+  col.append(el('div',{class:'who'},[avatar(m.from), el('span',{text:userName(m.from)}), el('span',{class:'date',text:jdate(m.date)})]));
+  col.append(el('div',{class:'bubble', text: m.deleted ? '(پیام حذف‌شده)' : (text || '(بدون متن)')}));
+  wrap.append(col);
+  return wrap;
+}
+
+function openTask(t){
+  const m = $('#modal');
+  m.innerHTML = '';
+  m.append(el('h2',{text:t.title||'(بدون عنوان)'}));
+  const b = state.maps.mBoard.get(t.kanban_board);
+  const head = el('div',{class:'row'});
+  head.append(el('span',{class:'badge '+(t.completed?'done':'open'), text:t.completed?'انجام‌شده':'باز'}));
+  if (b) head.append(el('span',{class:'chip', html:`<span style="width:8px;height:8px;border-radius:50%;background:${color(b.color)}"></span> ${b.title}`}));
+  for (const lid of (t.labels||[])){ const l=state.maps.mLabel.get(lid); if(l) head.append(el('span',{class:'chip label-chip', style:`background:${color(l.color)}`, text:l.title})); }
+  m.append(head);
+  if (t.notes) m.append(el('div',{class:'notes', text:t.notes}));
+  const kv = el('div',{class:'kv'});
+  const add = (k,v) => { kv.append(el('div',{class:'k',text:k})); kv.append(el('div',{},v)); };
+  add('مالک', userName(t.owner));
+  add('مسئول', (t.responsible||[]).map(userName).join('، ')||'—');
+  add('انجام‌دهندگان', (t.assignee||[]).map(userName).join('، ')||'—');
+  add('پیشرفت', t.progress!=null? t.progress+'%' : '—');
+  add('ساخته‌شده', jdate(t.created_at));
+  add('آخرین تغییر', jdate(t.modified_at));
+  if (t.completed) add('تکمیل', `${jdate(t.completed_at)}${t.completed_by?' • '+userName(t.completed_by):''}`);
+  if (t.has_deadline) add('مهلت', jdate(t.deadline));
+  if (t.has_attachments) add('پیوست‌ها', String((t.attachments||[]).length));
+  m.append(kv);
+  if (Array.isArray(t.checklist) && t.checklist.length){
+    m.append(el('div',{style:'margin-top:14px;color:var(--muted)',text:'چک‌لیست'}));
+    for (const item of t.checklist) m.append(el('div',{class:'check'},[el('span',{text:item.checked?'☑':'☐'}), el('span',{text:item.title||item.text||''})]));
+  }
+  // Files attached to this task (downloaded ones are clickable links).
+  const taskFiles = state.maps.mFilesByTask?.get(t._id) || [];
+  if (taskFiles.length){
+    m.append(el('div',{style:'margin-top:16px;color:var(--muted)',text:`پیوست‌ها (${taskFiles.length})`}));
+    const wrap = el('div',{style:'display:flex;flex-wrap:wrap;gap:8px;margin-top:8px'});
+    for (const f of taskFiles) wrap.append(fileChip(f));
+    m.append(wrap);
+  }
+  // Full comment thread (from comments.json) if available, else the last comment.
+  const thread = state.maps.mComments?.get(t._id) || [];
+  const list = thread.length ? thread : (t.last_comment?.comment ? [t.last_comment] : []);
+  if (list.length){
+    m.append(el('div',{style:'margin-top:16px;color:var(--muted)',text:`گفتگو (${list.length} نظر)`}));
+    for (const c of list){
+      const box = el('div',{class:'comment-box'});
+      box.append(el('div',{class:'ch'},[avatar(c.comment_owner), el('span',{text:userName(c.comment_owner)}), el('span',{class:'date',text:jdate(c.comment_at)}), c.deleted?el('span',{class:'muted',text:'(حذف‌شده)'}):null]));
+      box.append(el('div',{class:'ct', text: c.comment || ''}));
+      const docs = (c.attachments||[]).map(a => a?.media?.document).filter(Boolean);
+      if (docs.length){
+        const wrap = el('div',{style:'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px'});
+        for (const d of docs) wrap.append(fileChip(state.maps.mFileById?.get(d._id) || { name: d.name, size: d.size, path: null }));
+        box.append(wrap);
+      }
+      m.append(box);
+    }
+    m.append(el('div',{class:'muted',style:'margin-top:8px;font-size:12px', html:`این وظیفه پیام <code>${t.dialog_message||'—'}</code> در گفتگوی پروژه است.`}));
+  }
+  m.append(el('button',{style:'margin-top:18px', onclick:()=>$('#modalBg').classList.remove('open'), text:'بستن'}));
+  $('#modalBg').classList.add('open');
+}
+$('#modalBg').addEventListener('click', (e)=>{ if(e.target===$('#modalBg')) $('#modalBg').classList.remove('open'); });
+document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') $('#modalBg').classList.remove('open'); });
+
+boot().catch(err => { $('#main').innerHTML = `<div class="empty">خطا: ${err.message}</div>`; });
+</script>
+</body>
+</html>

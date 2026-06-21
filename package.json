@@ -1,0 +1,28 @@
+{
+  "name": "mizito-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Bridge your Mizito (office.mizito.ir) workspace to AI assistants and local tooling: a read-only MCP server for your tasks and messages, plus a crawler, SQLite loader, and viewer. Logs in via a real browser, saves the session, and reads data through Mizito's API.",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "login": "node apps/crawler/login.mjs",
+    "discover": "node apps/crawler/discover.mjs",
+    "crawl": "node apps/crawler/crawl.mjs",
+    "view": "node apps/viewer/server.mjs",
+    "files": "node apps/crawler/download-files.mjs",
+    "db": "node --no-warnings apps/crawler/load-db.mjs",
+    "api": "node apps/crawler/api.mjs",
+    "extract": "node apps/crawler/extract-api-surface.mjs",
+    "mcp": "node apps/mcp/index.mjs",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "playwright": "^1.49.0",
+    "zod": "^4.4.3"
+  }
+}

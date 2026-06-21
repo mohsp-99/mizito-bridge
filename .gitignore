@@ -1,0 +1,23 @@
+node_modules/
+
+# Secrets / session — never commit
+auth/
+.env
+
+# Crawled output (can be large; regenerate from a crawl)
+data/
+
+# Generated SQLite database (rebuild with `npm run db`)
+db/*.db
+db/*.db-wal
+db/*.db-shm
+
+# Playwright MCP scratch artifacts
+.playwright-mcp/
+*.tmp
+
+# Local Claude Code harness state
+.claude/
+
+# Local MCP client config (machine-specific absolute paths)
+.mcp.json

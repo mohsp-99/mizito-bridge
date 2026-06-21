@@ -1,0 +1,84 @@
+// High-level, typed-ish wrapper over the raw /api client. Each method maps to a
+// confirmed Mizito endpoint (see docs/API_NOTES.md). Keeping the endpoint names
+// in one place means the crawler reads cleanly and any API change is fixed here.
+import { createClient } from './http.js';
+import { loadToken } from './auth.js';
+
+export const CHAT_PAGE_SIZE = 15; // chat/getHistory returns 15 messages per page
+
+export function createMizito({ token = loadToken(), pacingMs = 200 } = {}) {
+  const client = createClient({ token, pacingMs });
+  const call = client.call;
+
+  return {
+    client,
+
+    // --- workspace ---
+    bootstrap: () => call('workspace/userId', { regId: null }),
+    // Switch the active workspace. Returns a NEW token scoped to that workspace;
+    // the original token is unaffected (token-scoped, not account-wide state).
+    switchWorkspace: (workspace_id) => call('workspace/switch', { workspace_id }, { raw: true }),
+    workspaceName: () => call('workspace/name', {}),
+    planInfo: () => call('workspace/planInfo', {}),
+    members: () => call('workspace/getUsers', {}),
+
+    // --- projects ---
+    projects: () => call('projects/getList', {}),
+    projectSummaries: () => call('projects/allSummary', {}),
+
+    // --- labels ---
+    taskLabels: () => call('labels/getAll', { type: 'task' }),
+
+    // --- task comment threads ---
+    // Full comment thread for a task, addressed by the task's access_token JWT
+    // (not its id). Returns an array of comments.
+    taskComments: (accessToken) => call('tasks/getComments', { token: accessToken }),
+
+    // --- dashboard ---
+    dashboardSummary: () => call('dashboard/getAllSummary', {}),
+    workspacesUsers: () => call('dashboard/getAllWorkspacesUsers', {}),
+
+    // --- "my" feeds (personal, scoped to the active/scoped workspace) ---
+    // The dashboard's personal task feed. outbox:false = tasks coming to me
+    // (assigned to / awaiting me) rather than ones I assigned out (outbox:true).
+    // Every task in the (active/scoped) workspace — the authoritative source.
+    // "My tasks" is derived by filtering this on assignee/responsible (see
+    // core/feed.js). Note: `tasks/upcoming {outbox:false}` is a *feed* of
+    // upcoming/unassigned tasks in dialogs you follow, NOT your assignments.
+    allTasks: () => call('tasks/getAll', {}),
+    upcomingFeed: (outbox = false) =>
+      call('tasks/upcoming', { outbox, from_dashboard: true, from: null, filter: null }),
+    tasksBadge: () => call('tasks/badge', {}),
+    inboxBadge: () => call('inbox/badge', {}),
+
+    // --- chat / dialogs (tasks live here) ---
+    dialogs: () => call('chat/getDialogs', {}),
+    fullChat: (dialog) => call('chat/getFullChat', { dialog }),
+    history: (dialog, offset = 0) => call('chat/getHistory', { dialog, offset }),
+
+    // Page through a dialog's entire message history. Returns all messages,
+    // oldest-to-newest order as the API provides them.
+    async fullHistory(dialog, { max = 100000, onPage } = {}) {
+      const all = [];
+      let offset = 0;
+      for (;;) {
+        const page = await call('chat/getHistory', { dialog, offset });
+        if (!Array.isArray(page) || page.length === 0) break;
+        all.push(...page);
+        if (onPage) onPage({ offset, size: page.length, total: all.length });
+        offset += page.length;
+        if (page.length < CHAT_PAGE_SIZE) break; // short page => last page
+        if (all.length >= max) break;
+      }
+      return all;
+    },
+  };
+}
+
+// Pull the task object out of a Mizito chat message, or null if it isn't a task.
+export function taskFromMessage(message) {
+  if (message?.media?._ === 'messageMediaTask' && message.media.task) {
+    return message.media.task;
+  }
+  return null;
+}
