@@ -155,6 +155,31 @@ A task's `last_comment` is embedded, but the **full thread** is a separate call:
 naive `{task: id}` probes fail. It returns the comment array (author, text, time, attachments,
 reply-to).
 
+### Writing back
+
+Reads are only half the story — the same token can drive the mutating endpoints the SPA
+uses. They're recovered from the bundle the same way as the reads, but note the calls are
+written `invokeApi("group.action", …)` with a **dot** (e.g. `tasks.newComment`); the dot
+maps to a slash in the URL (`POST /api/tasks/newComment`). Because a task is a message in a
+project group, **creating a task** (`tasks/add`) with `insert_to_chat_group:true` posts a
+`messageMediaTask` message into that group — the write mirror of how we read tasks out. The
+implemented writes:
+
+- **Create / edit task** — `tasks/add` / `tasks/save` (returns the task, incl. its
+  `access_token`).
+- **Comment on a task** — `tasks/newComment`, keyed by the task `access_token` (same key as
+  reading comments).
+- **Progress / completion** — `tasks/updateProgress`, `tasks/setCompleted` (the latter
+  needs the task's `project`).
+- **Chat message** — `chat/send` (the full outgoing message object; returns `true` with no
+  id, so a just-sent message is re-found via `getHistory` if you need its `mid`).
+
+One sharp edge: `tasks/removeTask` refuses a *completed* task (HTML "Bad Request") — reopen
+it first. Exact payloads and the full recovered surface are in
+[`API_NOTES.md`](./API_NOTES.md); the code lives in `core/write.js` (name-resolving layer)
+over `core/mizito.js` (raw calls), and every write is exercised by
+`apps/crawler/write-probe.mjs`.
+
 ### Files / attachments
 
 Attachments are `messageMediaDocument` objects (on task messages, task `attachments`, and

@@ -1,10 +1,16 @@
-// Mizito MCP server (read-only).
+// Mizito MCP server.
 //
-// Exposes a Claude (Desktop/Code) client a few personal, read-only views of the
-// signed-in Mizito account: who am I + my workspaces, a quick overview, the
-// tasks awaiting me, and conversations with unread messages. Data is pulled live
-// from Mizito's API using the session saved by `npm run login` (see core/auth.js)
-// — nothing here writes or mutates anything.
+// Exposes a Claude (Desktop/Code) client the signed-in Mizito account: personal
+// read views (who am I + my workspaces, a quick overview, the tasks awaiting me,
+// conversations with unread messages, and the projects/boards in a workspace),
+// plus WRITE actions (create/define a task, comment on a task, move its progress,
+// complete it, and send a chat message). Data is pulled live from Mizito's API
+// using the session saved by `npm run login` (see core/auth.js).
+//
+// The write tools mutate your real Mizito account; MCP clients prompt before
+// each call, so a user can allow or decline per action (or say up front they
+// don't want writes). Every write is verified live — see
+// apps/crawler/write-probe.mjs.
 //
 // Transport is stdio: the JSON-RPC protocol owns stdout, so this file must NEVER
 // write to stdout (use console.error / stderr for diagnostics only).
@@ -18,6 +24,15 @@ import {
   myTasks,
   unreadMessages,
 } from '../../core/feed.js';
+import {
+  listProjects,
+  createTask,
+  editTask,
+  commentOnTask,
+  setTaskProgress,
+  setTaskCompleted,
+  sendMessage,
+} from '../../core/write.js';
 
 // Return a tool result carrying a JSON payload as pretty text. MCP clients show
 // the text; the JSON keeps it machine-readable for Claude to reason over.
@@ -119,6 +134,258 @@ server.registerTool(
   (args) => withContext((ctx) => unreadMessages(ctx, { workspace: args?.workspace })),
 );
 
+server.registerTool(
+  'mizito_projects',
+  {
+    title: 'Mizito projects & boards',
+    description:
+      'List the projects in a Mizito workspace, each with its kanban boards and ' +
+      'chat dialog id. Use this to discover the exact project and board names to ' +
+      'pass to mizito_create_task or mizito_send_message. Defaults to the active ' +
+      'workspace; pass `workspace` to target another.',
+    inputSchema: {
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) => withContext((ctx) => listProjects(ctx, { workspace: args?.workspace })),
+);
+
+// --- write tools (mutating) ------------------------------------------------
+
+server.registerTool(
+  'mizito_create_task',
+  {
+    title: 'Create a Mizito task',
+    description:
+      'Create (define) a new task in Mizito. WRITES to your account. Give a title ' +
+      '(required); optionally a project (name or id) and board (name or id) to file ' +
+      'it under, notes, and assignees (member names or ids — defaults to you). For an ' +
+      'advanced project the task is also posted into the project chat group unless ' +
+      'post_to_chat is false. Use mizito_projects first to find valid project/board ' +
+      'names. Returns the created task (id, project, board).',
+    inputSchema: {
+      title: z.string().describe('The task title (required).'),
+      project: z
+        .string()
+        .optional()
+        .describe('Project by name or id to file the task under. Omit for a personal task.'),
+      board: z
+        .string()
+        .optional()
+        .describe('Kanban board by name or id within the project. Omit to use the first board.'),
+      notes: z.string().optional().describe('Optional task description / notes.'),
+      assignees: z
+        .array(z.string())
+        .optional()
+        .describe('Member names or ids to assign. Omit to assign to yourself.'),
+      deadline: z
+        .string()
+        .optional()
+        .describe('Optional deadline as an ISO date-time string.'),
+      post_to_chat: z
+        .boolean()
+        .optional()
+        .describe('For advanced projects, also post the task to the project chat (default true).'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      createTask(ctx, {
+        workspace: args?.workspace,
+        project: args?.project,
+        board: args?.board,
+        title: args?.title,
+        notes: args?.notes,
+        assignees: args?.assignees,
+        deadline: args?.deadline ?? null,
+        postToChat: args?.post_to_chat ?? true,
+      }),
+    ),
+);
+
+server.registerTool(
+  'mizito_edit_task',
+  {
+    title: 'Edit a Mizito task',
+    description:
+      'Edit an existing task\'s fields. WRITES to your account. Identify the task by task_id ' +
+      '(preferred) or task_title. Change any of: title, notes, deadline (ISO date-time, or ' +
+      'null to clear), progress, board (name/id), assignees (names/ids). Only the fields you ' +
+      'pass change; the rest are preserved. Returns the updated task.',
+    inputSchema: {
+      task_id: z.string().optional().describe('The task id (from mizito_my_tasks).'),
+      task_title: z.string().optional().describe('The task title, if you do not have the id.'),
+      title: z.string().optional().describe('New title.'),
+      notes: z.string().optional().describe('New notes / description.'),
+      deadline: z
+        .string()
+        .nullable()
+        .optional()
+        .describe('New deadline as an ISO date-time string, or null to clear it.'),
+      progress: z.number().min(0).max(100).optional().describe('New progress percent, 0–100.'),
+      board: z.string().optional().describe('Move to this kanban board (name or id).'),
+      assignees: z
+        .array(z.string())
+        .optional()
+        .describe('Replace assignees with these member names/ids.'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      editTask(ctx, {
+        workspace: args?.workspace,
+        taskId: args?.task_id,
+        taskTitle: args?.task_title,
+        title: args?.title,
+        notes: args?.notes,
+        deadline: args?.deadline,
+        progress: args?.progress,
+        board: args?.board,
+        assignees: args?.assignees,
+      }),
+    ),
+);
+
+server.registerTool(
+  'mizito_comment_task',
+  {
+    title: 'Comment on a Mizito task',
+    description:
+      'Add a comment to a task\'s discussion thread. WRITES to your account. Identify ' +
+      'the task by task_id (preferred) or task_title (must match exactly one task in ' +
+      'the workspace). Returns the task it commented on.',
+    inputSchema: {
+      comment: z.string().describe('The comment text (required).'),
+      task_id: z.string().optional().describe('The task id (from mizito_my_tasks).'),
+      task_title: z
+        .string()
+        .optional()
+        .describe('The task title, if you do not have the id. Must match exactly one task.'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      commentOnTask(ctx, {
+        workspace: args?.workspace,
+        taskId: args?.task_id,
+        taskTitle: args?.task_title,
+        comment: args?.comment,
+      }),
+    ),
+);
+
+server.registerTool(
+  'mizito_update_task_progress',
+  {
+    title: 'Update Mizito task progress',
+    description:
+      'Set a task\'s progress percentage (0–100). WRITES to your account. 100 marks the ' +
+      'task completed. Identify the task by task_id (preferred) or task_title.',
+    inputSchema: {
+      progress: z.number().min(0).max(100).describe('Progress percent, 0 to 100.'),
+      task_id: z.string().optional().describe('The task id (from mizito_my_tasks).'),
+      task_title: z.string().optional().describe('The task title, if you do not have the id.'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      setTaskProgress(ctx, {
+        workspace: args?.workspace,
+        taskId: args?.task_id,
+        taskTitle: args?.task_title,
+        progress: args?.progress,
+      }),
+    ),
+);
+
+server.registerTool(
+  'mizito_complete_task',
+  {
+    title: 'Complete or reopen a Mizito task',
+    description:
+      'Mark a task completed, or reopen it. WRITES to your account. Identify the task by ' +
+      'task_id (preferred) or task_title. Pass completed=false to reopen a finished task.',
+    inputSchema: {
+      task_id: z.string().optional().describe('The task id (from mizito_my_tasks).'),
+      task_title: z.string().optional().describe('The task title, if you do not have the id.'),
+      completed: z
+        .boolean()
+        .optional()
+        .describe('true to complete (default), false to reopen.'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      setTaskCompleted(ctx, {
+        workspace: args?.workspace,
+        taskId: args?.task_id,
+        taskTitle: args?.task_title,
+        completed: args?.completed ?? true,
+      }),
+    ),
+);
+
+server.registerTool(
+  'mizito_send_message',
+  {
+    title: 'Send a Mizito chat message',
+    description:
+      'Send a text message to a conversation. WRITES to your account. Target a project\'s ' +
+      'group chat by project name/id, or pass a dialog id directly. Use mizito_projects to ' +
+      'find a project\'s dialog. Returns where the message was sent.',
+    inputSchema: {
+      text: z.string().describe('The message text (required).'),
+      project: z
+        .string()
+        .optional()
+        .describe('Project by name or id — sends to its group chat.'),
+      dialog: z
+        .string()
+        .optional()
+        .describe('A dialog id to send to directly (alternative to project).'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      sendMessage(ctx, {
+        workspace: args?.workspace,
+        project: args?.project,
+        dialog: args?.dialog,
+        text: args?.text,
+      }),
+    ),
+);
+
 const transport = new StdioServerTransport();
 await server.connect(transport);
-console.error('[mizito-mcp] ready (stdio) — tools: whoami, overview, my_tasks, unread_messages');
+console.error(
+  '[mizito-mcp] ready (stdio) — read: whoami, overview, my_tasks, unread_messages, projects; ' +
+    'write: create_task, edit_task, comment_task, update_task_progress, complete_task, send_message',
+);

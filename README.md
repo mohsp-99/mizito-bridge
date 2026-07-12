@@ -3,18 +3,24 @@
 Bridge your [Mizito](https://office.mizito.ir) workspace to AI assistants and local
 tooling. Mizito is a closed SaaS with no public API, so `mizito-bridge`:
 
-- runs a **read-only [MCP](https://modelcontextprotocol.io) server** that lets an AI
-  client (Claude Desktop / Claude Code) answer "what tasks do I have?" and "any unread
-  messages?" from your live Mizito account, and
+- runs an **[MCP](https://modelcontextprotocol.io) server** that lets an AI client
+  (Claude Desktop / Claude Code) both **read** your account ("what tasks do I have?",
+  "any unread messages?") **and take actions** on it — create/define tasks, comment on
+  them, move their progress, complete them, and send chat messages, and
 - ships a **crawler + viewer + SQLite loader** to pull a workspace's data (tasks,
   chats, comments, files) to disk as JSON you can browse, query, and keep.
 
 You sign in once through a real browser (your password and any SMS code stay with you);
-the session token is saved locally and reused. Nothing here writes to or mutates your
-Mizito account.
+the session token is saved locally and reused.
 
-> **Unofficial.** Not affiliated with Mizito. It only reads data you already have access
-> to. Use it on your own account and respect Mizito's terms of service.
+> **Writes to your account.** The action tools create tasks, post comments, and send
+> messages as you. MCP clients prompt before each tool call, so you allow or decline per
+> action (or tell the assistant up front you don't want it writing). The read tools and
+> the crawler never mutate anything.
+
+> **Unofficial.** Not affiliated with Mizito; the API is reverse-engineered and
+> version-pinned, so a Mizito update can change it. Use it on your own account and
+> respect Mizito's terms of service.
 
 ---
 
@@ -27,11 +33,24 @@ Mizito account.
 
 ## Install
 
+From a clone (best for hacking on it or running the crawler/viewer):
+
 ```bash
 git clone https://github.com/mohsp-99/mizito-bridge.git
 cd mizito-bridge
 npm install          # also downloads the Chromium build Playwright drives for login
 ```
+
+Or use it straight from npm via the `mizito` CLI (no clone needed):
+
+```bash
+npx @mohsp-99/mizito-bridge login    # sign in once (opens a browser)
+npx @mohsp-99/mizito-bridge mcp       # run the MCP server
+npx @mohsp-99/mizito-bridge help      # all commands
+```
+
+The `mizito` command wraps every entry point (`login`, `mcp`, `projects`, `crawl`,
+`files`, `db`, `view`, `api`, …); `npm run <script>` still works from a clone.
 
 ## Sign in (once)
 
@@ -51,8 +70,11 @@ just run `npm run login` again.
 
 ## Use it with an AI assistant (MCP)
 
-The MCP server (`apps/mcp/`) exposes four **read-only** tools, aggregated across all your
-workspaces:
+The MCP server (`apps/mcp/`) exposes these tools. The **read** tools aggregate across all
+your workspaces; the **write** tools target one workspace (the active one unless you name
+another) and resolve project/board/member/task by name.
+
+**Read**
 
 | Tool | Answers |
 | --- | --- |
@@ -60,11 +82,34 @@ workspaces:
 | `mizito_overview` | per-workspace counts: inbox, unread chats, task buckets |
 | `mizito_my_tasks` | tasks assigned to you (title, project, deadline, progress) |
 | `mizito_unread_messages` | conversations with unread messages |
+| `mizito_projects` | projects + kanban boards (+ dialog ids) in a workspace |
+
+**Write** (mutates your account — clients prompt before each call)
+
+| Tool | Does |
+| --- | --- |
+| `mizito_create_task` | create/define a task (title, project, board, notes, assignees) |
+| `mizito_edit_task` | edit a task's title/notes/deadline/progress/board/assignees |
+| `mizito_comment_task` | add a comment to a task (by id or exact title) |
+| `mizito_update_task_progress` | set a task's progress 0–100 (100 completes it) |
+| `mizito_complete_task` | complete a task, or reopen it |
+| `mizito_send_message` | send a chat message to a project's group chat or a dialog |
+
+A typical flow: `mizito_projects` to see valid project/board names → `mizito_create_task`
+to file one → `mizito_my_tasks` then `mizito_comment_task` / `mizito_update_task_progress`
+to work it. Tasks are addressed by `task_id` (from `mizito_my_tasks`) or by exact title.
 
 Smoke-test it standalone first (it speaks MCP over stdio):
 
 ```bash
-npm run mcp
+npm run mcp        # or: npx @mohsp-99/mizito-bridge mcp
+```
+
+Confirm the write endpoints work against your live account at any time — this creates a
+test task/comment/message in your active workspace and **deletes them again**:
+
+```bash
+npm run test:write
 ```
 
 ### Claude Desktop
@@ -99,7 +144,9 @@ On Windows, JSON needs escaped backslashes, e.g.
 claude mcp add mizito --scope user -- node /absolute/path/to/mizito-bridge/apps/mcp/index.mjs
 ```
 
-Then ask: *"What Mizito tasks do I have?"* or *"Any unread Mizito messages?"*
+Then ask: *"What Mizito tasks do I have?"*, *"Any unread Mizito messages?"*, or have it
+act — *"Create a Mizito task 'Draft the report' in the Ops project"*, *"Comment 'done' on
+my task X"*, *"Mark task Y complete"*. It'll ask before each write.
 
 ---
 
@@ -181,14 +228,26 @@ node apps/crawler/capture-project.mjs # capture a project's calls by driving the
 ## Layout
 
 ```
-core/          config + auth + API client + personal-feed layer (shared building blocks)
-apps/crawler/  login / discover / crawl / files / db entry points
+bin/           the `mizito` CLI dispatcher (one entry point over the app scripts)
+index.js       programmatic entry point (import the read/write helpers in your own code)
+core/          config + auth + API client + read (feed) + write layers (shared building blocks)
+apps/crawler/  login / discover / crawl / files / db / projects / write-probe entry points
 apps/viewer/   local data browser
-apps/mcp/      read-only MCP server (Claude Desktop / Claude Code)
-docs/          how Mizito works + reverse-engineering notes
+apps/mcp/      MCP server — read + write tools (Claude Desktop / Claude Code)
+docs/          how Mizito works + reverse-engineering notes (incl. write endpoints)
 auth/          saved session (git-ignored — never commit)
 data/          crawl output (git-ignored)
 db/            SQLite store (git-ignored)
+```
+
+### Use it as a library
+
+```js
+import { buildContext, createTask, myTasks } from '@mohsp-99/mizito-bridge';
+
+const ctx = await buildContext();                       // uses the saved session
+await createTask(ctx, { project: 'Ops', title: 'Ship it' });
+const mine = await myTasks(ctx);
 ```
 
 ## How it works

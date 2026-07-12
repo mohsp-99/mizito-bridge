@@ -34,6 +34,41 @@ export function createMizito({ token = loadToken(), pacingMs = 200 } = {}) {
     // (not its id). Returns an array of comments.
     taskComments: (accessToken) => call('tasks/getComments', { token: accessToken }),
 
+    // --- writes (mutating; verified live, see apps/crawler/write-probe.mjs) ---
+    // Create a task. `task` is the full add payload (title, assignee, project,
+    // kanban_board, ...); returns the created task object (with _id,
+    // access_token, dialog). Advanced-project tasks are posted into the project
+    // chat group when `insert_to_chat_group` is true.
+    addTask: (task) => call('tasks/add', task),
+    // Edit an existing task. Needs `task_id` + the task's `token` (access_token).
+    saveTask: (task) => call('tasks/save', task),
+    // Delete a task, addressed by its access_token JWT.
+    removeTask: (accessToken) => call('tasks/removeTask', { token: accessToken }),
+    // Add a comment to a task's thread (keyed by access_token, like getComments).
+    newTaskComment: ({ token, comment, attachments = [], mention = [], reply_id = null }) =>
+      call('tasks/newComment', { token, comment, attachments, mention, reply_id }),
+    // Set a task's progress (0..100). 100 marks it completed server-side.
+    updateTaskProgress: (accessToken, progress) =>
+      call('tasks/updateProgress', { token: accessToken, progress }),
+    // Complete (or reopen) a task. `project` is required by the API. On reopen
+    // (completed:false) pass the target `progress` and optional `undone_user_id`.
+    setTaskCompleted: ({ token, completed, project, progress, undone_user_id = null }) =>
+      call('tasks/setCompleted', {
+        token,
+        completed,
+        project,
+        ...(progress != null ? { progress } : {}),
+        undone_user_id,
+      }),
+
+    // --- chat writes ---
+    // Send a message to a dialog. `message` is the full outgoing message object
+    // ({ _:'message', dialog, out:true, message, from, date, randomId, ... }).
+    // Returns `true` on success (no message id echoed back).
+    sendMessage: (message) => call('chat/send', message),
+    // Delete a message you sent, addressed by dialog + message id (mid).
+    removeSentMessage: (dialog, mid) => call('chat/removeSentMessage', { dialog, mid }),
+
     // --- dashboard ---
     dashboardSummary: () => call('dashboard/getAllSummary', {}),
     workspacesUsers: () => call('dashboard/getAllWorkspacesUsers', {}),

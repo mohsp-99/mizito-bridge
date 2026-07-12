@@ -41,6 +41,28 @@ async function clientForWorkspace(root, baseToken, ws) {
   return createMizito({ token });
 }
 
+// Resolve a single target workspace for a WRITE (default: the active one).
+// Returns a workspace-scoped client plus the workspace descriptor, so callers
+// know exactly where the mutation landed. Throws if a name/id was given but no
+// workspace matches (writes must not silently hit the wrong workspace).
+export async function resolveWorkspace(ctx, { workspace } = {}) {
+  const all = ctx.boot.workspaces ?? [];
+  let ws;
+  if (!workspace) {
+    ws = all.find((w) => w.active) ?? all[0];
+  } else {
+    const needle = String(workspace).trim().toLowerCase();
+    ws = all.find((w) => w._id === workspace || (w.title ?? '').trim().toLowerCase() === needle);
+    if (!ws) {
+      const names = all.map((w) => `"${w.title}"`).join(', ');
+      throw new Error(`No workspace matches "${workspace}". Available: ${names}.`);
+    }
+  }
+  if (!ws) throw new Error('No workspaces available on this account.');
+  const mz = await clientForWorkspace(ctx.root, ctx.token, ws);
+  return { mz, ws: { id: ws._id, title: ws.title, active: !!ws.active } };
+}
+
 // Pick which workspaces to read: all, or just the one matching id/title.
 function selectWorkspaces(boot, { workspace } = {}) {
   const all = boot.workspaces ?? [];

@@ -44,6 +44,14 @@ statically. They are discovered at runtime by `apps/crawler/discover.mjs`, which
 the live `/capi` traffic while browsing the workspace. See
 `data/_discovery/endpoints.json` after running `npm run discover`.
 
+**Endpoint literals use dot notation.** In the bundle the SPA calls
+`invokeApi("group.action", payload)` — e.g. `invokeApi("tasks.newComment", …)`. The dot
+maps to a slash in the URL: `tasks.newComment` → `POST /api/tasks/newComment`. So the full
+API surface *is* greppable in the (gunzipped) bundle as `invokeApi("…")` literals — that is
+how the write endpoints below were recovered (the earlier `group/action` slash scan missed
+them). `npm run extract` lists the `group/action` shaped literals; grepping the bundle for
+`invokeApi\("[a-z]+\.[a-z]+"` lists the rest.
+
 Hash-route hints seen in the SPA (UI sections that imply data endpoints):
 `/projects`, `/projects/monitor`, `/project/monitor/tasks`,
 `/project/monitor/calendar`, `/tasks`, `/monitoring/users`, `/monitoring/tasks`,
@@ -117,6 +125,31 @@ in `chat/getDialogs`.
 
 The crawler fetches this for every task with `has_comments` and writes `comments.json`
 (`[{task_id, count, comments:[...]}]`).
+
+## Write endpoints (verified live)
+
+All `POST`, act on the session's **active/scoped** workspace (switch first for another).
+Every one of these was exercised end-to-end against a real workspace and cleaned up — see
+`apps/crawler/write-probe.mjs` (`npm run test:write`). Wrapped in `core/mizito.js` (raw) and
+`core/write.js` (name-resolving, normalized); surfaced as MCP tools in `apps/mcp/index.mjs`.
+
+| Endpoint | Payload | Returns / notes |
+| --- | --- | --- |
+| `tasks/add` | `{title, notes, assignee:[uid], project, kanban_board, labels:[], attachments:[], deleted:false, alarm_options:null, progress:0, deadline_start, deadline, checklist:[], responsible, insert_to_chat_group}` | The created **task object** (`_id, access_token, dialog, …`). For an advanced project, `insert_to_chat_group:true` also posts the task message into the project group chat. `project`/`kanban_board` may be `null` for a personal task. |
+| `tasks/save` | same shape **plus** `{task_id, token}` (token = `access_token`) | Updated task object. Used to edit an existing task. |
+| `tasks/newComment` | `{token: access_token, comment, attachments:[], mention:[], reply_id:null}` | `true`. Keyed by the task `access_token` JWT (same as `getComments`). |
+| `tasks/updateProgress` | `{token: access_token, progress}` (0–100) | Updated task object. `progress:100` completes it. |
+| `tasks/setCompleted` | `{token, completed, project, progress?, undone_user_id?}` | Updated task object. `project` is **required**. Completing sets `progress:100`; reopening (`completed:false`) takes the target `progress` and optional `undone_user_id`. |
+| `tasks/removeTask` | `{token: access_token}` | `{message}` on success. **Gotcha:** rejects a *completed* task with an HTML "Bad Request" — reopen (`setCompleted{completed:false}`) first, then delete. |
+| `chat/send` | `{_:"message", dialog, out:true, message, media:null, from:uid, date:Date.now(), reply_to:null, mention:[], seen_count:1, randomId}` | `true` — **no message id echoed back**. To delete a just-sent message, find its `mid` via `chat/getHistory` then `chat/removeSentMessage`. |
+| `chat/removeSentMessage` | `{dialog, mid}` | `true`. Deletes a message you sent. |
+
+The full recovered API surface (≈200 `invokeApi` literals across `tasks/chat/projects/
+workspace/inbox/labels/notes/meeting/…`) is much larger than what is wired up; only the
+task + chat write surface above is implemented. Other notable unimplemented writes seen in
+the bundle: `tasks/snooze`, `tasks/setChecklistCheckedValue`, `tasks/toggleBookmark`,
+`tasks/removeFromBoard`, `tasks/setKanbanWeight`, `projects/add`, `projects/addKanbanBoard`,
+`labels/add`, `chat/createDialog`, `chat/updateSentMessage`, `inbox/send`.
 
 ## Files / attachments
 
