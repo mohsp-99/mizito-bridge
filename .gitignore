@@ -7,6 +7,9 @@ auth/
 # Crawled output (can be large; regenerate from a crawl)
 data/
 
+# Downloaded attachments (via mizito_download_file)
+downloads/
+
 # Generated SQLite database (rebuild with `npm run db`)
 db/*.db
 db/*.db-wal

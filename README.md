@@ -83,6 +83,8 @@ another) and resolve project/board/member/task by name.
 | `mizito_my_tasks` | tasks assigned to you (title, project, deadline, progress) |
 | `mizito_unread_messages` | conversations with unread messages |
 | `mizito_projects` | projects + kanban boards (+ dialog ids) in a workspace |
+| `mizito_task_comments` | a task's comment thread + attachment metadata (by id or title) |
+| `mizito_download_file` | download an attachment by its content token to `downloads/` |
 
 **Write** (mutates your account — clients prompt before each call)
 

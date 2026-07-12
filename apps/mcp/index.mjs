@@ -26,6 +26,8 @@ import {
 } from '../../core/feed.js';
 import {
   listProjects,
+  getTaskComments,
+  downloadAttachment,
   createTask,
   editTask,
   commentOnTask,
@@ -151,6 +153,67 @@ server.registerTool(
     },
   },
   (args) => withContext((ctx) => listProjects(ctx, { workspace: args?.workspace })),
+);
+
+server.registerTool(
+  'mizito_task_comments',
+  {
+    title: 'Read a Mizito task\'s comments',
+    description:
+      'Read the full comment thread of a task, including each comment\'s author, text, ' +
+      'time, and any file attachments. Identify the task by task_id (preferred) or ' +
+      'task_title. Each attachment includes its name, size, and a `content_token` — pass ' +
+      'that token to mizito_download_file to fetch the file.',
+    inputSchema: {
+      task_id: z.string().optional().describe('The task id (from mizito_my_tasks).'),
+      task_title: z.string().optional().describe('The task title, if you do not have the id.'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      getTaskComments(ctx, {
+        workspace: args?.workspace,
+        taskId: args?.task_id,
+        taskTitle: args?.task_title,
+      }),
+    ),
+);
+
+server.registerTool(
+  'mizito_download_file',
+  {
+    title: 'Download a Mizito attachment',
+    description:
+      'Download a file attachment by its content_token (get one from mizito_task_comments). ' +
+      'Saves the file under downloads/<workspace>/ and returns its local path and size. For ' +
+      'small files, set inline=true to also get the bytes back as base64. Pass the same ' +
+      'workspace the task belongs to (attachment tokens are workspace-scoped).',
+    inputSchema: {
+      content_token: z.string().describe('The attachment content token (JWT) from mizito_task_comments.'),
+      name: z.string().optional().describe('Filename to save as (defaults from the attachment).'),
+      inline: z
+        .boolean()
+        .optional()
+        .describe('Also return the file bytes as base64 (only for files ≤ ~1 MB). Default false.'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id — must be the task\'s workspace. Omit for the active one.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      downloadAttachment(ctx, {
+        workspace: args?.workspace,
+        contentToken: args?.content_token,
+        name: args?.name,
+        maxInlineBytes: args?.inline ? 1024 * 1024 : 0,
+      }),
+    ),
 );
 
 // --- write tools (mutating) ------------------------------------------------
@@ -386,6 +449,7 @@ server.registerTool(
 const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error(
-  '[mizito-mcp] ready (stdio) — read: whoami, overview, my_tasks, unread_messages, projects; ' +
-    'write: create_task, edit_task, comment_task, update_task_progress, complete_task, send_message',
+  '[mizito-mcp] ready (stdio) — read: whoami, overview, my_tasks, unread_messages, ' +
+    'projects, task_comments, download_file; write: create_task, edit_task, comment_task, ' +
+    'update_task_progress, complete_task, send_message',
 );
