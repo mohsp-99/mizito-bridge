@@ -90,6 +90,44 @@ export function createMizito({ token = loadToken(), pacingMs = 200 } = {}) {
     dialogs: () => call('chat/getDialogs', {}),
     fullChat: (dialog) => call('chat/getFullChat', { dialog }),
     history: (dialog, offset = 0) => call('chat/getHistory', { dialog, offset }),
+    // Combined view of a dialog (members, admins, pinned, counts, title).
+    chatView: (dialog) => call('chat/getChatView', { dialog }),
+    // Full-text search across messages. mode='all' (or a dialog id); optional
+    // search_str and bookmarked filter. Returns an array of matching messages.
+    searchMessages: ({ mode = 'all', offset = 0, search_str, bookmarked } = {}) =>
+      call('chat/search', {
+        mode,
+        offset,
+        ...(search_str ? { search_str } : {}),
+        ...(bookmarked ? { bookmarked } : {}),
+      }),
+    // WRITE: open (or return) a direct-message dialog with a user. Returns the dialog.
+    createDialog: (user) => call('chat/createDialog', { user }),
+    // WRITE: mark a dialog seen up to `seen_count` messages.
+    chatSeen: (dialog, seen_count) => call('chat/seen', { dialog, seen_count }),
+
+    // --- letters / correspondence ("inbox" — Mizito's دبیرخانه/مکاتبات) ---
+    // Formal letters, threaded like email. Every op is keyed by `thread`; `mode`
+    // is the mailbox ('inbox' | 'outbox' | 'archive'). See docs/API_NOTES.md.
+    // The response shape carries per-recipient read receipts and attachments.
+    letters: (mode = 'inbox', offset = 0, extra = {}) =>
+      call('inbox/getInbox', { mode, offset, ...extra }),
+    letterThread: (thread) => call('inbox/getHistory', { thread }),
+    letterLabels: (thread) => call('inbox/getMessageLabels', { thread }),
+    // WRITES (mutating). Recovered from the SPA bundle; unlike the task/chat
+    // writes these are NOT yet exercised live — see docs/API_NOTES.md.
+    // Compose/send a letter. `body` is the compose model:
+    // { to:[uid], subject, content, attachments:[], tasks_insert_to_chat_groups:[],
+    //   labels:[] } — plus `thread` when replying within an existing thread.
+    sendLetter: (body) => call('inbox/send', body),
+    letterSeen: (thread) => call('inbox/seen', { thread }),
+    // Archive/unarchive a letter thread. Sent (outbox) letters use the
+    // `.sender` variant (dots map to slashes in the URL).
+    letterArchive: (thread, { outbox = false } = {}) =>
+      call(outbox ? 'inbox/archive/sender' : 'inbox/archive', { thread }),
+    letterUnarchive: (thread, { outbox = false } = {}) =>
+      call(outbox ? 'inbox/unArchive/sender' : 'inbox/unArchive', { thread }),
+    letterToggleBookmark: (thread) => call('inbox/toggleBookmark', { thread }),
 
     // Page through a dialog's entire message history. Returns all messages,
     // oldest-to-newest order as the API provides them.

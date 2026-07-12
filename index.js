@@ -28,8 +28,28 @@ export {
 export {
   listProjects,
   createTask,
+  editTask,
   commentOnTask,
   setTaskProgress,
   setTaskCompleted,
   sendMessage,
+  getTaskComments,
+  downloadAttachment,
 } from './core/write.js';
+
+// Letters / correspondence (read + write).
+export {
+  listLetters,
+  readLetter,
+  sendLetter,
+  replyLetter,
+  markLetterRead,
+  archiveLetter,
+} from './core/letters.js';
+
+// Conversations / chat (read + write).
+export {
+  listConversations,
+  readConversation,
+  messageUser,
+} from './core/conversations.js';

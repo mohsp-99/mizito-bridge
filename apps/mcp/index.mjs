@@ -1,11 +1,15 @@
 // Mizito MCP server.
 //
-// Exposes a Claude (Desktop/Code) client the signed-in Mizito account: personal
-// read views (who am I + my workspaces, a quick overview, the tasks awaiting me,
-// conversations with unread messages, and the projects/boards in a workspace),
-// plus WRITE actions (create/define a task, comment on a task, move its progress,
-// complete it, and send a chat message). Data is pulled live from Mizito's API
-// using the session saved by `npm run login` (see core/auth.js).
+// Exposes a Claude (Desktop/Code) client the signed-in Mizito account:
+//   - personal read views (who am I + my workspaces, a quick overview, the tasks
+//     awaiting me, conversations with unread messages, projects/boards),
+//   - TASK reads/writes (comments, create/edit/comment/progress/complete),
+//   - LETTERS / correspondence (list + read a letter thread; send, reply,
+//     mark-read, archive), and
+//   - CONVERSATIONS / chat (list conversations, read a thread, send a message —
+//     to a project chat, a dialog, or a member directly).
+// Data is pulled live from Mizito's API using the session saved by `npm run
+// login` (see core/auth.js).
 //
 // The write tools mutate your real Mizito account; MCP clients prompt before
 // each call, so a user can allow or decline per action (or say up front they
@@ -35,6 +39,19 @@ import {
   setTaskCompleted,
   sendMessage,
 } from '../../core/write.js';
+import {
+  listLetters,
+  readLetter,
+  sendLetter,
+  replyLetter,
+  markLetterRead,
+  archiveLetter,
+} from '../../core/letters.js';
+import {
+  listConversations,
+  readConversation,
+  messageUser,
+} from '../../core/conversations.js';
 
 // Return a tool result carrying a JSON payload as pretty text. MCP clients show
 // the text; the JSON keeps it machine-readable for Claude to reason over.
@@ -214,6 +231,117 @@ server.registerTool(
         maxInlineBytes: args?.inline ? 1024 * 1024 : 0,
       }),
     ),
+);
+
+// --- conversations (chat) reads --------------------------------------------
+
+server.registerTool(
+  'mizito_conversations',
+  {
+    title: 'List Mizito conversations',
+    description:
+      'List the conversations (direct messages, team groups, and project chats) in a ' +
+      'Mizito workspace, most recent first. Each item has the conversation title, kind ' +
+      '(direct/group/project), unread count, message count, and last-message time. Set ' +
+      'unread_only to see just those with unread messages. Defaults to the active ' +
+      'workspace. Use the returned dialog id with mizito_read_conversation.',
+    inputSchema: {
+      unread_only: z.boolean().optional().describe('Only conversations with unread messages (default false).'),
+      limit: z.number().int().min(1).max(200).optional().describe('Max conversations to return (default 50).'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      listConversations(ctx, {
+        workspace: args?.workspace,
+        unreadOnly: args?.unread_only ?? false,
+        limit: args?.limit ?? 50,
+      }),
+    ),
+);
+
+server.registerTool(
+  'mizito_read_conversation',
+  {
+    title: 'Read a Mizito conversation',
+    description:
+      "Read a conversation's recent messages, oldest first. Identify it by dialog id " +
+      '(from mizito_conversations), by project name/id (its group chat), or by a member ' +
+      'name/id (an existing direct message). Each message reports its author, whether it ' +
+      'is mine, time, and kind (text, task, task_mention, photo, document, or service).',
+    inputSchema: {
+      dialog: z.string().optional().describe('Dialog id (from mizito_conversations or mizito_projects).'),
+      project: z.string().optional().describe('Project name/id — reads its group chat.'),
+      user: z.string().optional().describe('Member name/id — reads your direct message with them.'),
+      limit: z.number().int().min(1).max(200).optional().describe('Max messages to return (default 30).'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      readConversation(ctx, {
+        workspace: args?.workspace,
+        dialog: args?.dialog,
+        project: args?.project,
+        user: args?.user,
+        limit: args?.limit ?? 30,
+      }),
+    ),
+);
+
+// --- letters / correspondence reads ----------------------------------------
+
+server.registerTool(
+  'mizito_letters',
+  {
+    title: 'List Mizito letters',
+    description:
+      "List letters from Mizito's correspondence module (formal, threaded messages — the " +
+      'دبیرخانه/مکاتبات feature, distinct from chat). Choose the mailbox with box: inbox ' +
+      '(received, default), outbox (sent), or archive. Each row has the thread id, subject, ' +
+      'sender, unread flag, date, attachment/label counts, whether it is formally ' +
+      'registered, and a short preview. Use the thread id with mizito_read_letter. Defaults ' +
+      'to the active workspace.',
+    inputSchema: {
+      box: z.enum(['inbox', 'outbox', 'archive']).optional().describe('Mailbox: inbox (default), outbox, or archive.'),
+      limit: z.number().int().min(1).max(200).optional().describe('Max letters to return (default 30).'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      listLetters(ctx, { workspace: args?.workspace, box: args?.box ?? 'inbox', limit: args?.limit ?? 30 }),
+    ),
+);
+
+server.registerTool(
+  'mizito_read_letter',
+  {
+    title: 'Read a Mizito letter',
+    description:
+      'Read a full letter thread by its thread id (from mizito_letters): subject, sender, ' +
+      'recipients with per-person read receipts, body text, attachments (each with a ' +
+      'content_token for mizito_download_file), labels, and any follow-up replies in the ' +
+      'thread.',
+    inputSchema: {
+      thread: z.string().describe('The letter thread id (from mizito_letters).'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) => withContext((ctx) => readLetter(ctx, { workspace: args?.workspace, thread: args?.thread })),
 );
 
 // --- write tools (mutating) ------------------------------------------------
@@ -416,9 +544,11 @@ server.registerTool(
   {
     title: 'Send a Mizito chat message',
     description:
-      'Send a text message to a conversation. WRITES to your account. Target a project\'s ' +
-      'group chat by project name/id, or pass a dialog id directly. Use mizito_projects to ' +
-      'find a project\'s dialog. Returns where the message was sent.',
+      "Send a text chat message. WRITES to your account. Target one of: a project's group " +
+      'chat (project name/id), a dialog directly (dialog id), or a member directly (user ' +
+      "name/id — opens the direct message if it doesn't exist yet). Use mizito_projects or " +
+      'mizito_conversations to find targets. This is chat, not the letters module — for a ' +
+      'formal letter use mizito_send_letter. Returns where the message was sent.',
     inputSchema: {
       text: z.string().describe('The message text (required).'),
       project: z
@@ -429,6 +559,10 @@ server.registerTool(
         .string()
         .optional()
         .describe('A dialog id to send to directly (alternative to project).'),
+      user: z
+        .string()
+        .optional()
+        .describe('A member name or id — sends them a direct message (opens the DM if needed).'),
       workspace: z
         .string()
         .optional()
@@ -437,11 +571,114 @@ server.registerTool(
   },
   (args) =>
     withContext((ctx) =>
-      sendMessage(ctx, {
+      args?.user
+        ? messageUser(ctx, { workspace: args?.workspace, user: args.user, text: args?.text })
+        : sendMessage(ctx, {
+            workspace: args?.workspace,
+            project: args?.project,
+            dialog: args?.dialog,
+            text: args?.text,
+          }),
+    ),
+);
+
+// --- letters / correspondence writes (mutating) ----------------------------
+
+server.registerTool(
+  'mizito_send_letter',
+  {
+    title: 'Send a Mizito letter',
+    description:
+      "Send a formal letter via Mizito's correspondence module (not chat). WRITES to your " +
+      'account. Give recipients (to: member names or ids), a subject, and content. Use ' +
+      'mizito_whoami / a workspace\'s members to find names. Returns the sent letter\'s ' +
+      'thread id.',
+    inputSchema: {
+      to: z.array(z.string()).describe('Recipient member names or ids (at least one).'),
+      subject: z.string().describe('The letter subject (required).'),
+      content: z.string().describe('The letter body (required; plain text or HTML).'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      sendLetter(ctx, {
         workspace: args?.workspace,
-        project: args?.project,
-        dialog: args?.dialog,
-        text: args?.text,
+        to: args?.to,
+        subject: args?.subject,
+        content: args?.content,
+      }),
+    ),
+);
+
+server.registerTool(
+  'mizito_reply_letter',
+  {
+    title: 'Reply to a Mizito letter',
+    description:
+      'Reply within an existing letter thread. WRITES to your account. Identify the thread ' +
+      'by its id (from mizito_letters / mizito_read_letter). The reply is addressed to the ' +
+      "thread's participants automatically. Returns the thread id.",
+    inputSchema: {
+      thread: z.string().describe('The letter thread id (from mizito_letters).'),
+      content: z.string().describe('The reply body (required).'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      replyLetter(ctx, { workspace: args?.workspace, thread: args?.thread, content: args?.content }),
+    ),
+);
+
+server.registerTool(
+  'mizito_mark_letter_read',
+  {
+    title: 'Mark a Mizito letter read',
+    description:
+      'Mark a letter thread as read. WRITES to your account. Identify the thread by its id ' +
+      '(from mizito_letters).',
+    inputSchema: {
+      thread: z.string().describe('The letter thread id (from mizito_letters).'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) => withContext((ctx) => markLetterRead(ctx, { workspace: args?.workspace, thread: args?.thread })),
+);
+
+server.registerTool(
+  'mizito_archive_letter',
+  {
+    title: 'Archive a Mizito letter',
+    description:
+      'Move a letter thread to the archive (or back out with unarchive=true). WRITES to your ' +
+      'account. For a sent letter, set box=outbox so the correct archive is used.',
+    inputSchema: {
+      thread: z.string().describe('The letter thread id (from mizito_letters).'),
+      box: z.enum(['inbox', 'outbox']).optional().describe('Which mailbox the letter is in (default inbox).'),
+      unarchive: z.boolean().optional().describe('true to move it back out of the archive (default false).'),
+      workspace: z
+        .string()
+        .optional()
+        .describe('Workspace by exact title or id. Omit for the active workspace.'),
+    },
+  },
+  (args) =>
+    withContext((ctx) =>
+      archiveLetter(ctx, {
+        workspace: args?.workspace,
+        thread: args?.thread,
+        box: args?.box ?? 'inbox',
+        unarchive: args?.unarchive ?? false,
       }),
     ),
 );
@@ -450,6 +687,7 @@ const transport = new StdioServerTransport();
 await server.connect(transport);
 console.error(
   '[mizito-mcp] ready (stdio) — read: whoami, overview, my_tasks, unread_messages, ' +
-    'projects, task_comments, download_file; write: create_task, edit_task, comment_task, ' +
-    'update_task_progress, complete_task, send_message',
+    'projects, task_comments, download_file, conversations, read_conversation, letters, ' +
+    'read_letter; write: create_task, edit_task, comment_task, update_task_progress, ' +
+    'complete_task, send_message, send_letter, reply_letter, mark_letter_read, archive_letter',
 );

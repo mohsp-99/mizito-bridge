@@ -34,6 +34,38 @@ export const log = {
   err: (...a) => console.error(`[${ts()}] ✗`, ...a),
 };
 
+// Strip HTML to readable plain text. Mizito letter bodies (inbox/getInbox
+// `short_content`, inbox/getHistory `content`) are HTML fragments; this turns
+// block boundaries into newlines, drops the remaining tags, and decodes the few
+// entities the app emits. It is a readability helper, not a sanitizer.
+export function stripHtml(html) {
+  if (html == null) return '';
+  let s = String(html);
+  // Block-level boundaries become newlines so paragraphs stay separated.
+  s = s.replace(/<\s*\/?\s*(br|p|div|li|tr|h[1-6])\b[^>]*>/gi, '\n');
+  s = s.replace(/<[^>]*>/g, '');
+  s = s
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&zwnj;/gi, '‌')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&#(\d+);/g, (_, n) => {
+      try {
+        return String.fromCodePoint(Number(n));
+      } catch {
+        return '';
+      }
+    });
+  return s
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 // Make a filesystem-safe slug from an arbitrary (incl. Persian) name.
 export function slug(name) {
   return String(name)

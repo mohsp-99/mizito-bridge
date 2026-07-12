@@ -5,8 +5,9 @@ tooling. Mizito is a closed SaaS with no public API, so `mizito-bridge`:
 
 - runs an **[MCP](https://modelcontextprotocol.io) server** that lets an AI client
   (Claude Desktop / Claude Code) both **read** your account ("what tasks do I have?",
-  "any unread messages?") **and take actions** on it — create/define tasks, comment on
-  them, move their progress, complete them, and send chat messages, and
+  "any unread messages?", "read my latest letter") **and take actions** on it — create,
+  edit, comment on, progress and complete tasks; send chat messages; and send/reply to
+  formal letters (the correspondence module), and
 - ships a **crawler + viewer + SQLite loader** to pull a workspace's data (tasks,
   chats, comments, files) to disk as JSON you can browse, query, and keep.
 
@@ -81,10 +82,14 @@ another) and resolve project/board/member/task by name.
 | `mizito_whoami` | who you are + your workspaces |
 | `mizito_overview` | per-workspace counts: inbox, unread chats, task buckets |
 | `mizito_my_tasks` | tasks assigned to you (title, project, deadline, progress) |
-| `mizito_unread_messages` | conversations with unread messages |
+| `mizito_unread_messages` | conversations with unread messages (across workspaces) |
 | `mizito_projects` | projects + kanban boards (+ dialog ids) in a workspace |
 | `mizito_task_comments` | a task's comment thread + attachment metadata (by id or title) |
 | `mizito_download_file` | download an attachment by its content token to `downloads/` |
+| `mizito_conversations` | list conversations in a workspace (direct/group/project) |
+| `mizito_read_conversation` | read a conversation's messages (by dialog, project, or member) |
+| `mizito_letters` | list letters — inbox / outbox / archive (the correspondence module) |
+| `mizito_read_letter` | read a letter thread (recipients, read receipts, body, attachments) |
 
 **Write** (mutates your account — clients prompt before each call)
 
@@ -95,7 +100,19 @@ another) and resolve project/board/member/task by name.
 | `mizito_comment_task` | add a comment to a task (by id or exact title) |
 | `mizito_update_task_progress` | set a task's progress 0–100 (100 completes it) |
 | `mizito_complete_task` | complete a task, or reopen it |
-| `mizito_send_message` | send a chat message to a project's group chat or a dialog |
+| `mizito_send_message` | send a chat message to a project chat, a dialog, or a member (DM) |
+| `mizito_send_letter` | send a formal letter (recipients, subject, content) |
+| `mizito_reply_letter` | reply within a letter thread |
+| `mizito_mark_letter_read` | mark a letter thread read |
+| `mizito_archive_letter` | archive a letter (or move it back) |
+
+**Letters vs. chat.** Mizito has two messaging systems: **chat** (`mizito_send_message`,
+`mizito_conversations`) for quick conversations, and **letters** (`mizito_letters`,
+`mizito_send_letter`) — a formal, threaded correspondence module (the دبیرخانه/مکاتبات
+feature) with recipients, per-person read receipts, and optional secretariat
+registration. The letter *read* tools are verified live; the letter *write* tools are
+built from the app's own API but not yet exercised end-to-end, so double-check the first
+one you send.
 
 A typical flow: `mizito_projects` to see valid project/board names → `mizito_create_task`
 to file one → `mizito_my_tasks` then `mizito_comment_task` / `mizito_update_task_progress`
@@ -232,7 +249,7 @@ node apps/crawler/capture-project.mjs # capture a project's calls by driving the
 ```
 bin/           the `mizito` CLI dispatcher (one entry point over the app scripts)
 index.js       programmatic entry point (import the read/write helpers in your own code)
-core/          config + auth + API client + read (feed) + write layers (shared building blocks)
+core/          config + auth + API client + read (feed) + write + letters + conversations layers
 apps/crawler/  login / discover / crawl / files / db / projects / write-probe entry points
 apps/viewer/   local data browser
 apps/mcp/      MCP server — read + write tools (Claude Desktop / Claude Code)

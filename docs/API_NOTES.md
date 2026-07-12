@@ -145,11 +145,80 @@ Every one of these was exercised end-to-end against a real workspace and cleaned
 | `chat/removeSentMessage` | `{dialog, mid}` | `true`. Deletes a message you sent. |
 
 The full recovered API surface (≈200 `invokeApi` literals across `tasks/chat/projects/
-workspace/inbox/labels/notes/meeting/…`) is much larger than what is wired up; only the
-task + chat write surface above is implemented. Other notable unimplemented writes seen in
-the bundle: `tasks/snooze`, `tasks/setChecklistCheckedValue`, `tasks/toggleBookmark`,
+workspace/inbox/labels/notes/meeting/…`) is much larger than what is wired up. The task
+and chat write surface above is implemented; the letters (inbox) + conversations surface
+is implemented too (see the two sections below). Other notable unimplemented writes seen
+in the bundle: `tasks/snooze`, `tasks/setChecklistCheckedValue`, `tasks/toggleBookmark`,
 `tasks/removeFromBoard`, `tasks/setKanbanWeight`, `projects/add`, `projects/addKanbanBoard`,
-`labels/add`, `chat/createDialog`, `chat/updateSentMessage`, `inbox/send`.
+`labels/add`, `chat/updateSentMessage`, `inbox/registerInLetter`, `inbox/registerOutLetter`.
+
+## Letters / correspondence (the "inbox" module)
+
+Mizito's `inbox/*` group is **not** chat — it's a formal, threaded correspondence
+module (the دبیرخانه/مکاتبات feature: letters with recipients, read receipts, and
+optional secretariat registration with in/out numbers). **Verified live (reads).**
+
+Letters are grouped into **threads**; nearly every op is keyed by `{thread}`. The
+mailbox is chosen by `mode`.
+
+| Endpoint | Payload | Returns |
+| --- | --- | --- |
+| `inbox/getInbox` | `{mode, offset, ...extra}` — `mode` = `inbox`\|`outbox`\|`archive` | **array** of letter rows: `{_id, thread, msg_id, subject, from, send_date, unread, attachments_count, labels:[id], dialogs, secretariat, short_content(HTML), raw_content, count, receivers?(outbox)}`. Page size ~50. |
+| `inbox/getHistory` | `{thread}` | the letter: `{_id, thread, subject, from, to:[{user,unread,seen_date,archived}], receivers, send_date, content(HTML), is_seen, bookmarked, labels, dialogs, attachments, messages:[…replies]}`. Single-message threads have an empty `messages`. |
+| `inbox/getMessageLabels` | `{thread}` | array of label objects `{_id,title,color,type,deleted}`. |
+| `inbox/badge` | `{}` | `{ inbox_count }` (already used by the overview). |
+
+Write endpoints (**recovered from the bundle; NOT yet exercised live** — unlike the
+task/chat writes). All `POST`, act on the active/scoped workspace.
+
+| Endpoint | Payload | Notes |
+| --- | --- | --- |
+| `inbox/send` | compose model `{to:[uid], subject, content(HTML), attachments:[], tasks_insert_to_chat_groups:[], labels:[]}`; add `{thread}` to reply within a thread | The SPA rejects an empty `to`. In the UI `to` is an array of user objects mapped to ids before sending. |
+| `inbox/seen` | `{thread}` | Mark a letter thread read. |
+| `inbox/archive` / `inbox/archive/sender` | `{thread}` | Archive; the `.sender` variant is for **sent** (outbox) letters. (In the bundle the literal is `inbox.archive.sender`; dots map to slashes in the URL — see below.) |
+| `inbox/unArchive` / `inbox/unArchive/sender` | `{thread}` | Unarchive (received / sent). |
+| `inbox/toggleBookmark` | `{thread}` | Bookmark toggle. |
+| `inbox/registerInLetter` / `inbox/registerOutLetter` | `{thread, letterOptions}` | Formal secretariat registration (نامه‌ی وارده/صادره). Not wired up. |
+| `inbox/changeMessageLabels` | `{thread, labels:[id]}` | Not wired up. |
+| `inbox/changeMessageDialogs` | `{thread, dialogs:[id]}` | Link a letter to chat dialogs. Not wired up. |
+| `inbox/getSeenDetails` | `{thread, msgId}` | Per-recipient seen details. Not wired up. |
+| `inbox/deleteMessage` | `{thread}` | Not wired up. |
+
+**URL construction (dots → slashes).** The SPA builds every data URL as
+`api_url + "/api/" + endpoint.replaceAll(".", "/")`. So a two-dot literal like
+`inbox.archive.sender` becomes `POST /api/inbox/archive/sender`.
+
+Wrapped in `core/mizito.js` (raw: `letters`, `letterThread`, `letterLabels`,
+`sendLetter`, `letterSeen`, `letterArchive`, `letterUnarchive`,
+`letterToggleBookmark`) and `core/letters.js` (name-resolving, normalized:
+`listLetters`, `readLetter`, `sendLetter`, `replyLetter`, `markLetterRead`,
+`archiveLetter`); surfaced as the `mizito_letters` / `mizito_read_letter` /
+`mizito_send_letter` / `mizito_reply_letter` / `mizito_mark_letter_read` /
+`mizito_archive_letter` MCP tools.
+
+## Conversations (chat) — extra endpoints
+
+Beyond the confirmed `chat/getDialogs` / `getFullChat` / `getHistory` / `getMessages`
+/ `send` / `removeSentMessage` above, the read side uses:
+
+| Endpoint | Payload | Returns / notes |
+| --- | --- | --- |
+| `chat/getChatView` | `{dialog}` | Combined dialog view: `{_id, is_group, is_project_group, project_entity, photo, unread_count, messages_count, members, group_admins, pinned_messages, title, …}`. **Verified live.** |
+| `chat/search` | `{mode, offset, search_str?, bookmarked?}` — `mode` = `all` or a dialog id | **array** of matching messages. **Verified live** (empty result on an empty query). |
+| `chat/createDialog` | `{user}` (a member id) | **WRITE.** Opens (or returns the existing) direct-message dialog with a user; returns the dialog. Recovered from the bundle. |
+| `chat/seen` | `{dialog, seen_count}` | **WRITE.** Mark a dialog seen up to `seen_count`. Recovered from the bundle. |
+
+**Message kinds** seen in `chat/getHistory` (used by the conversation normalizer):
+`message` (plain text, `.message`), `messageMediaTask` / `messageMediaMentionInTask`
+(`.media.task`), `messageMediaPhoto` (`.media.photo.photo_{small,medium,large}` each
+with a CDN `content` token), `messageMediaDocument` (`.media.document`), and
+`messageService` (group events).
+
+Wrapped in `core/mizito.js` (`chatView`, `searchMessages`, `createDialog`,
+`chatSeen`) and `core/conversations.js` (`listConversations`, `readConversation`,
+`messageUser`); surfaced as `mizito_conversations` / `mizito_read_conversation`, and
+`mizito_send_message` gained a `user` target (direct message) that opens the DM via
+`chat/createDialog`.
 
 ## Files / attachments
 
