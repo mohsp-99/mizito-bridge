@@ -1,0 +1,41 @@
+{
+  "name": "@mohsp-99/mizito",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Client library for the Mizito (office.mizito.ir) API — tasks, chat, letters, projects, workspaces. Reverse-engineered, no browser, no server: log in with a saved session or credentials and call the API directly.",
+  "license": "MIT",
+  "author": "mohsp-99",
+  "homepage": "https://github.com/mohsp-99/mizito-bridge#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohsp-99/mizito-bridge.git",
+    "directory": "packages/mizito"
+  },
+  "bugs": {
+    "url": "https://github.com/mohsp-99/mizito-bridge/issues"
+  },
+  "keywords": [
+    "mizito",
+    "tasks",
+    "project-management",
+    "api-client",
+    "automation"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "*.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {}
+}

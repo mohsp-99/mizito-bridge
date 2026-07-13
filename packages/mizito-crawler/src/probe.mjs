@@ -3,8 +3,8 @@
 // bundle builds dynamically.
 //
 //   node scripts/probe.mjs
-import { createClient, MizitoApiError } from '../../core/http.js';
-import { requireToken } from '../../core/auth.js';
+import { createClient, MizitoApiError } from '@mohsp-99/mizito';
+import { requireToken } from '@mohsp-99/mizito';
 
 const PROJECT_ID = process.env.PROJECT_ID || '675185f20050a49165b09579';
 const BOARD_ID = process.env.BOARD_ID || '6751ab2aab9f991d709a3efc';

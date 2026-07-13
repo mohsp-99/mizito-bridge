@@ -10,9 +10,9 @@
 // or to refresh an expired session on demand.
 //
 // If your account ever asks for a one-time code, pass it with `--code 123456`.
-import { createSession, loadCredentials } from '../../core/login.js';
-import { SESSION_PATH } from '../../core/config.js';
-import { log } from '../../core/util.js';
+import { createSession, loadCredentials } from '@mohsp-99/mizito';
+import { SESSION_PATH } from '@mohsp-99/mizito';
+import { log } from '@mohsp-99/mizito';
 
 function argValue(flag) {
   const i = process.argv.indexOf(flag);

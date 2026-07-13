@@ -4,8 +4,8 @@
 //   node apps/crawler/projects.mjs "Workspace Name"
 //
 // Handy for finding the exact project/board names to pass when creating tasks.
-import { buildContext } from '../../core/feed.js';
-import { listProjects } from '../../core/write.js';
+import { buildContext } from '@mohsp-99/mizito';
+import { listProjects } from '@mohsp-99/mizito';
 
 const workspace = process.argv[2] || process.env.WORKSPACE || undefined;
 

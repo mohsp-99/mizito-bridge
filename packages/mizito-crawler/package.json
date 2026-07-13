@@ -1,0 +1,30 @@
+{
+  "name": "@mohsp-99/mizito-crawler",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser login, workspace crawler, SQLite loader, attachment downloader, and local data viewer for Mizito — built on @mohsp-99/mizito. Run these from the repo root (or set MIZITO_DATA_DIR) so auth/, data/, db/ land in one place.",
+  "license": "MIT",
+  "author": "mohsp-99",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "login": "node src/login.mjs",
+    "relogin": "node src/relogin.mjs",
+    "projects": "node src/projects.mjs",
+    "discover": "node src/discover.mjs",
+    "crawl": "node src/crawl.mjs",
+    "view": "node src/viewer/server.mjs",
+    "files": "node src/download-files.mjs",
+    "db": "node --no-warnings src/load-db.mjs",
+    "api": "node src/api.mjs",
+    "extract": "node src/extract-api-surface.mjs",
+    "test:write": "node src/write-probe.mjs",
+    "postinstall": "playwright install chromium || exit 0"
+  },
+  "dependencies": {
+    "@mohsp-99/mizito": "^0.1.0",
+    "playwright": "^1.49.0"
+  }
+}

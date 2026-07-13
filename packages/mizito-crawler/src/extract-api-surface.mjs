@@ -7,8 +7,8 @@
 // even though the full URLs are built at runtime. This downloads the bundle and
 // lists every `group/action`-shaped literal, grouped, to data/_discovery/.
 import path from 'node:path';
-import { WEB_BASE, DATA_DIR } from '../../core/config.js';
-import { ensureDir, writeJson, log } from '../../core/util.js';
+import { WEB_BASE, DATA_DIR } from '@mohsp-99/mizito';
+import { ensureDir, writeJson, log } from '@mohsp-99/mizito';
 
 const BUNDLE = `${WEB_BASE}/a_.js`;
 const OUT = path.join(DATA_DIR, '_discovery', 'api-surface.json');

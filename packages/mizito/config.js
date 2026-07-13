@@ -7,10 +7,12 @@
 //     stored by the SPA in localStorage/sessionStorage under `token`.
 
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const ROOT = path.resolve(__dirname, '..');
+// Runtime data root. The library must not anchor data to its own install
+// location (it may sit inside node_modules); the consumer's working directory
+// — or an explicit MIZITO_DATA_DIR — decides where auth/, data/, db/,
+// downloads/ live. Run tools from the repo root, or set MIZITO_DATA_DIR.
+export const ROOT = path.resolve(process.env.MIZITO_DATA_DIR || process.cwd());
 
 export const WEB_BASE = 'https://office.mizito.ir';
 export const WEB_LOGIN_URL = `${WEB_BASE}/#/lg/login`;

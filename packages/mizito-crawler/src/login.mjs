@@ -8,9 +8,9 @@
 //   - auth/storageState.json  (full cookies + localStorage, for re-opening a browser)
 //   - auth/session.json       (just the x-token the API client needs)
 import { chromium } from 'playwright';
-import { WEB_LOGIN_URL, STORAGE_STATE_PATH, AUTH_DIR } from '../../core/config.js';
-import { tokenFromStorageState, saveSession } from '../../core/auth.js';
-import { ensureDir, writeJson, log, sleep } from '../../core/util.js';
+import { WEB_LOGIN_URL, STORAGE_STATE_PATH, AUTH_DIR } from '@mohsp-99/mizito';
+import { tokenFromStorageState, saveSession } from '@mohsp-99/mizito';
+import { ensureDir, writeJson, log, sleep } from '@mohsp-99/mizito';
 
 const LOGIN_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes to finish logging in
 

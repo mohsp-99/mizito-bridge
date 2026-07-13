@@ -1,8 +1,9 @@
 {
-  "name": "@mohsp-99/mizito-bridge",
+  "name": "mizito-monorepo",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "description": "Bridge your Mizito (office.mizito.ir) workspace to AI assistants and local tooling: an MCP server that reads your tasks/messages AND creates tasks, comments, and sends messages, plus a crawler, SQLite loader, and viewer. Logs in via a real browser, saves the session, and works through Mizito's (reverse-engineered) API.",
+  "description": "Monorepo for the Mizito (office.mizito.ir) bridge: @mohsp-99/mizito (core API library), @mohsp-99/mizito-crawler (browser login, crawler, SQLite, viewer), @mohsp-99/mizito-mcp (MCP server).",
   "license": "MIT",
   "author": "mohsp-99",
   "homepage": "https://github.com/mohsp-99/mizito-bridge#readme",
@@ -13,57 +14,29 @@
   "bugs": {
     "url": "https://github.com/mohsp-99/mizito-bridge/issues"
   },
-  "keywords": [
-    "mizito",
-    "mcp",
-    "model-context-protocol",
-    "claude",
-    "tasks",
-    "project-management",
-    "automation"
-  ],
   "engines": {
     "node": ">=20"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "bin": {
     "mizito": "bin/mizito.mjs"
   },
-  "main": "index.js",
-  "exports": {
-    ".": "./index.js",
-    "./core/*": "./core/*"
-  },
-  "files": [
-    "bin/",
-    "core/",
-    "apps/",
-    "docs/",
-    "index.js",
-    "README.md",
-    "LICENSE"
-  ],
   "scripts": {
-    "login": "node apps/crawler/login.mjs",
-    "relogin": "node apps/crawler/relogin.mjs",
-    "mcp": "node apps/mcp/index.mjs",
-    "projects": "node apps/crawler/projects.mjs",
-    "discover": "node apps/crawler/discover.mjs",
-    "crawl": "node apps/crawler/crawl.mjs",
-    "view": "node apps/viewer/server.mjs",
-    "files": "node apps/crawler/download-files.mjs",
-    "db": "node --no-warnings apps/crawler/load-db.mjs",
-    "api": "node apps/crawler/api.mjs",
-    "extract": "node apps/crawler/extract-api-surface.mjs",
-    "test:write": "node apps/crawler/write-probe.mjs",
-    "postinstall": "playwright install chromium || exit 0",
-    "prepublishOnly": "node -e \"process.exit(0)\""
-  },
-  "publishConfig": {
-    "access": "public"
-  },
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "playwright": "^1.49.0",
-    "zod": "^4.4.3"
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "login": "node packages/mizito-crawler/src/login.mjs",
+    "relogin": "node packages/mizito-crawler/src/relogin.mjs",
+    "mcp": "node packages/mizito-mcp/src/index.mjs",
+    "projects": "node packages/mizito-crawler/src/projects.mjs",
+    "discover": "node packages/mizito-crawler/src/discover.mjs",
+    "crawl": "node packages/mizito-crawler/src/crawl.mjs",
+    "view": "node packages/mizito-crawler/src/viewer/server.mjs",
+    "files": "node packages/mizito-crawler/src/download-files.mjs",
+    "db": "node --no-warnings packages/mizito-crawler/src/load-db.mjs",
+    "api": "node packages/mizito-crawler/src/api.mjs",
+    "extract": "node packages/mizito-crawler/src/extract-api-surface.mjs",
+    "test:write": "node packages/mizito-crawler/src/write-probe.mjs"
   }
 }

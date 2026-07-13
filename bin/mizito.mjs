@@ -24,20 +24,20 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
-// command -> script, relative to the package root.
+// command -> script, relative to the repo root.
 const COMMANDS = {
-  login: 'apps/crawler/login.mjs',
-  relogin: 'apps/crawler/relogin.mjs',
-  mcp: 'apps/mcp/index.mjs',
-  projects: 'apps/crawler/projects.mjs',
-  crawl: 'apps/crawler/crawl.mjs',
-  files: 'apps/crawler/download-files.mjs',
-  db: 'apps/crawler/load-db.mjs',
-  view: 'apps/viewer/server.mjs',
-  api: 'apps/crawler/api.mjs',
-  discover: 'apps/crawler/discover.mjs',
-  extract: 'apps/crawler/extract-api-surface.mjs',
-  'write-probe': 'apps/crawler/write-probe.mjs',
+  login: 'packages/mizito-crawler/src/login.mjs',
+  relogin: 'packages/mizito-crawler/src/relogin.mjs',
+  mcp: 'packages/mizito-mcp/src/index.mjs',
+  projects: 'packages/mizito-crawler/src/projects.mjs',
+  crawl: 'packages/mizito-crawler/src/crawl.mjs',
+  files: 'packages/mizito-crawler/src/download-files.mjs',
+  db: 'packages/mizito-crawler/src/load-db.mjs',
+  view: 'packages/mizito-crawler/src/viewer/server.mjs',
+  api: 'packages/mizito-crawler/src/api.mjs',
+  discover: 'packages/mizito-crawler/src/discover.mjs',
+  extract: 'packages/mizito-crawler/src/extract-api-surface.mjs',
+  'write-probe': 'packages/mizito-crawler/src/write-probe.mjs',
 };
 
 // db is loaded with --no-warnings (uses the experimental node:sqlite).

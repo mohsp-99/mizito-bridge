@@ -27,7 +27,7 @@ import {
   overview,
   myTasks,
   unreadMessages,
-} from '../../core/feed.js';
+} from '@mohsp-99/mizito';
 import {
   listProjects,
   getTaskComments,
@@ -38,7 +38,7 @@ import {
   setTaskProgress,
   setTaskCompleted,
   sendMessage,
-} from '../../core/write.js';
+} from '@mohsp-99/mizito';
 import {
   listLetters,
   readLetter,
@@ -46,12 +46,12 @@ import {
   replyLetter,
   markLetterRead,
   archiveLetter,
-} from '../../core/letters.js';
+} from '@mohsp-99/mizito';
 import {
   listConversations,
   readConversation,
   messageUser,
-} from '../../core/conversations.js';
+} from '@mohsp-99/mizito';
 
 // Return a tool result carrying a JSON payload as pretty text. MCP clients show
 // the text; the JSON keeps it machine-readable for Claude to reason over.

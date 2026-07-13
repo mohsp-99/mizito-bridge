@@ -7,8 +7,8 @@
 //   HEADLESS=1 node scripts/capture-project.mjs (unattended)
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { WEB_BASE, STORAGE_STATE_PATH, DATA_DIR } from '../../core/config.js';
-import { ensureDir, writeJson, log, sleep } from '../../core/util.js';
+import { WEB_BASE, STORAGE_STATE_PATH, DATA_DIR } from '@mohsp-99/mizito';
+import { ensureDir, writeJson, log, sleep } from '@mohsp-99/mizito';
 
 const HEADLESS = process.env.HEADLESS === '1';
 const PROJECT_TITLE = process.env.PROJECT_TITLE || 'تحقیق و ‌طراحی';
