@@ -1,15 +1,23 @@
 # mizito-bridge
 
 Bridge your [Mizito](https://office.mizito.ir) workspace to AI assistants and local
-tooling. Mizito is a closed SaaS with no public API, so `mizito-bridge`:
+tooling. Mizito is a closed SaaS with no public API, so this repo provides — as three
+workspace packages on one shared core:
 
-- runs an **[MCP](https://modelcontextprotocol.io) server** that lets an AI client
+- **[`@mohsp-99/mizito`](packages/mizito)** — a typed, dependency-free **TypeScript
+  client library** for Mizito's (reverse-engineered) API: resource namespaces
+  (`client.tasks.*`, `client.chat.*`, `client.letters.*`, …), cross-workspace feeds,
+  and pluggable token providers with automatic re-login. Use it directly from any
+  Node ≥ 20 script — no browser, no server.
+- **[`@mohsp-99/mizito-mcp`](packages/mizito-mcp)** — an
+  **[MCP](https://modelcontextprotocol.io) server** that lets an AI client
   (Claude Desktop / Claude Code) both **read** your account ("what tasks do I have?",
   "any unread messages?", "read my latest letter") **and take actions** on it — create,
   edit, comment on, progress and complete tasks; send chat messages; and send/reply to
-  formal letters (the correspondence module), and
-- ships a **crawler + viewer + SQLite loader** to pull a workspace's data (tasks,
-  chats, comments, files) to disk as JSON you can browse, query, and keep.
+  formal letters (the correspondence module).
+- **[`@mohsp-99/mizito-crawler`](packages/mizito-crawler)** — the **browser login,
+  crawler, viewer and SQLite loader** to pull a workspace's data (tasks, chats,
+  comments, files) to disk as JSON you can browse, query, and keep.
 
 You sign in once through a real browser (your password and any SMS code stay with you);
 the session token is saved locally and reused.
@@ -34,24 +42,25 @@ the session token is saved locally and reused.
 
 ## Install
 
-From a clone (best for hacking on it or running the crawler/viewer):
+From a clone:
 
 ```bash
 git clone https://github.com/mohsp-99/mizito-bridge.git
 cd mizito-bridge
-npm install          # also downloads the Chromium build Playwright drives for login
+npm install          # links the workspaces; also downloads Chromium for the browser login
+npm run build        # builds the TypeScript core + MCP server into dist/
 ```
 
-Or use it straight from npm via the `mizito` CLI (no clone needed):
+The repo is an npm-workspaces monorepo (`packages/mizito`, `packages/mizito-crawler`,
+`packages/mizito-mcp`). The root `mizito` CLI wraps every entry point (`login`, `mcp`,
+`projects`, `crawl`, `files`, `db`, `view`, `api`, …); `npm run <script>` works from the
+repo root.
 
-```bash
-npx @mohsp-99/mizito-bridge login    # sign in once (opens a browser)
-npx @mohsp-99/mizito-bridge mcp       # run the MCP server
-npx @mohsp-99/mizito-bridge help      # all commands
-```
-
-The `mizito` command wraps every entry point (`login`, `mcp`, `projects`, `crawl`,
-`files`, `db`, `view`, `api`, …); `npm run <script>` still works from a clone.
+> **Where data lives.** All tools anchor their runtime dirs (`auth/`, `data/`, `db/`,
+> `downloads/`) at the **current working directory**, or at `MIZITO_DATA_DIR` when set.
+> Run them from the repo root (the npm scripts do), or export
+> `MIZITO_DATA_DIR=/path/to/mizito-bridge` for tools launched from elsewhere — e.g. the
+> MCP server started by Claude Desktop.
 
 ## Sign in
 
@@ -99,7 +108,7 @@ re-running anything. Without credentials, a stale session just asks you to sign 
 
 ## Use it with an AI assistant (MCP)
 
-The MCP server (`apps/mcp/`) exposes these tools. The **read** tools aggregate across all
+The MCP server (`packages/mizito-mcp/`) exposes these tools. The **read** tools aggregate across all
 your workspaces; the **write** tools target one workspace (the active one unless you name
 another) and resolve project/board/member/task by name.
 
@@ -146,10 +155,11 @@ A typical flow: `mizito_projects` to see valid project/board names → `mizito_c
 to file one → `mizito_my_tasks` then `mizito_comment_task` / `mizito_update_task_progress`
 to work it. Tasks are addressed by `task_id` (from `mizito_my_tasks`) or by exact title.
 
-Smoke-test it standalone first (it speaks MCP over stdio):
+Smoke-test it standalone first (it speaks MCP over stdio; build once with
+`npm run build`):
 
 ```bash
-npm run mcp        # or: npx @mohsp-99/mizito-bridge mcp
+npm run mcp
 ```
 
 Confirm the write endpoints work against your live account at any time — this creates a
@@ -167,28 +177,31 @@ Desktop. The config file is at:
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-Use the **absolute path** to `apps/mcp/index.mjs` in your clone, and make sure `node` is
-on your PATH (or give its absolute path as `command`):
+Use the **absolute path** to `packages/mizito-mcp/dist/index.js` in your clone (build it
+first with `npm run build`), make sure `node` is on your PATH (or give its absolute path
+as `command`), and point `MIZITO_DATA_DIR` at the clone so the server finds `auth/`:
 
 ```json
 {
   "mcpServers": {
     "mizito": {
       "command": "node",
-      "args": ["/absolute/path/to/mizito-bridge/apps/mcp/index.mjs"]
+      "args": ["/absolute/path/to/mizito-bridge/packages/mizito-mcp/dist/index.js"],
+      "env": { "MIZITO_DATA_DIR": "/absolute/path/to/mizito-bridge" }
     }
   }
 }
 ```
 
 On Windows, JSON needs escaped backslashes, e.g.
-`"C:\\Users\\you\\mizito-bridge\\apps\\mcp\\index.mjs"`.
+`"C:\\Users\\you\\mizito-bridge\\packages\\mizito-mcp\\dist\\index.js"`.
 
 ### Claude Code
 
 ```bash
 # from anywhere; --scope user makes it available in every project
-claude mcp add mizito --scope user -- node /absolute/path/to/mizito-bridge/apps/mcp/index.mjs
+claude mcp add mizito --scope user --env MIZITO_DATA_DIR=/absolute/path/to/mizito-bridge \
+  -- node /absolute/path/to/mizito-bridge/packages/mizito-mcp/dist/index.js
 ```
 
 Then ask: *"What Mizito tasks do I have?"*, *"Any unread Mizito messages?"*, or have it
@@ -266,8 +279,8 @@ For re-learning the API if Mizito changes (see [`docs/API_NOTES.md`](docs/API_NO
 npm run discover                       # record live /api traffic while the app loads
 npm run extract                        # list endpoint-shaped literals from the JS bundle
 npm run api workspace/userId           # call any endpoint with the saved session
-node apps/crawler/probe.mjs            # try candidate endpoints/payloads
-node apps/crawler/capture-project.mjs # capture a project's calls by driving the UI
+node packages/mizito-crawler/src/probe.mjs            # try candidate endpoints/payloads
+node packages/mizito-crawler/src/capture-project.mjs  # capture a project's calls by driving the UI
 ```
 
 ---
@@ -275,27 +288,46 @@ node apps/crawler/capture-project.mjs # capture a project's calls by driving the
 ## Layout
 
 ```
-bin/           the `mizito` CLI dispatcher (one entry point over the app scripts)
-index.js       programmatic entry point (import the read/write helpers in your own code)
-core/          config + auth + API client + read (feed) + write + letters + conversations layers
-apps/crawler/  login / relogin / discover / crawl / files / db / projects / write-probe entry points
-apps/viewer/   local data browser
-apps/mcp/      MCP server — read + write tools (Claude Desktop / Claude Code)
-docs/          how Mizito works + reverse-engineering notes (incl. write endpoints)
-auth/          saved session + optional credentials (git-ignored — never commit)
-data/          crawl output (git-ignored)
-db/            SQLite store (git-ignored)
+bin/                      the `mizito` CLI dispatcher (one entry point over the package scripts)
+packages/mizito/          @mohsp-99/mizito — the core TypeScript library (zero dependencies)
+  src/client.ts             createClient() → resource namespaces (tasks, chat, letters, …)
+  src/transport/            fetch wrapper: envelope unwrap, retries, typed error codes
+  src/auth/                 verified password hash, headless login, token providers
+  src/feeds/                cross-workspace reads + name-resolving write layer
+  src/types/                reverse-engineered API shapes (Task, Dialog, Letter, …)
+packages/mizito-crawler/  login / relogin / discover / crawl / files / db / viewer / probes
+packages/mizito-mcp/      MCP server — read + write tools (Claude Desktop / Claude Code)
+docs/                     how Mizito works + reverse-engineering notes (incl. write endpoints)
+auth/                     saved session + optional credentials (git-ignored — never commit)
+data/                     crawl output (git-ignored)
+db/                       SQLite store (git-ignored)
 ```
 
 ### Use it as a library
 
-```js
-import { buildContext, createTask, myTasks } from '@mohsp-99/mizito-bridge';
+The core is a normal npm package — installing it pulls **no browser and no MCP SDK**,
+and it ships types:
 
-const ctx = await buildContext();                       // uses the saved session
+```ts
+import { createClient, buildContext, createTask, myTasks, passwordSession } from '@mohsp-99/mizito';
+
+// Low-level: typed resource namespaces over one workspace token.
+const client = createClient();                          // token from the saved session
+const tasks = await client.tasks.getAll();
+const scoped = await client.workspaces.switch(otherWorkspaceId);
+
+// High-level: cross-workspace feeds + name-resolving writes.
+const ctx = await buildContext();                       // heals expired sessions itself
 await createTask(ctx, { project: 'Ops', title: 'Ship it' });
 const mine = await myTasks(ctx);
+
+// No disk at all: keep the session in memory (e.g. CI, serverless).
+const ephemeral = await buildContext(passwordSession({ username: '09…', password: '…' }));
 ```
+
+Tokens come from a pluggable `TokenProvider` (`staticToken` / `diskSession` /
+`passwordSession`, or your own `{ getToken, onAuthExpired }`), so the library never
+dictates where your secrets live.
 
 ## How it works
 

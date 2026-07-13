@@ -28,7 +28,7 @@ const ROOT = path.resolve(__dirname, '..');
 const COMMANDS = {
   login: 'packages/mizito-crawler/src/login.mjs',
   relogin: 'packages/mizito-crawler/src/relogin.mjs',
-  mcp: 'packages/mizito-mcp/src/index.mjs',
+  mcp: 'packages/mizito-mcp/dist/index.js',
   projects: 'packages/mizito-crawler/src/projects.mjs',
   crawl: 'packages/mizito-crawler/src/crawl.mjs',
   files: 'packages/mizito-crawler/src/download-files.mjs',

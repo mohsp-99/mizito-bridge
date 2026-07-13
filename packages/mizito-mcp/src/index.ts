@@ -8,13 +8,13 @@
 //     mark-read, archive), and
 //   - CONVERSATIONS / chat (list conversations, read a thread, send a message —
 //     to a project chat, a dialog, or a member directly).
-// Data is pulled live from Mizito's API using the session saved by `npm run
-// login` (see core/auth.js).
+// Data is pulled live from Mizito's API using the session saved by `mizito
+// login` / `mizito relogin` (the core's diskSession provider).
 //
 // The write tools mutate your real Mizito account; MCP clients prompt before
 // each call, so a user can allow or decline per action (or say up front they
-// don't want writes). Every write is verified live — see
-// apps/crawler/write-probe.mjs.
+// don't want writes). Every write is verified live — see the mizito-crawler
+// package's write-probe script.
 //
 // Transport is stdio: the JSON-RPC protocol owns stdout, so this file must NEVER
 // write to stdout (use console.error / stderr for diagnostics only).
@@ -27,8 +27,6 @@ import {
   overview,
   myTasks,
   unreadMessages,
-} from '@mohsp-99/mizito';
-import {
   listProjects,
   getTaskComments,
   downloadAttachment,
@@ -38,29 +36,32 @@ import {
   setTaskProgress,
   setTaskCompleted,
   sendMessage,
-} from '@mohsp-99/mizito';
-import {
   listLetters,
   readLetter,
   sendLetter,
   replyLetter,
   markLetterRead,
   archiveLetter,
-} from '@mohsp-99/mizito';
-import {
   listConversations,
   readConversation,
   messageUser,
 } from '@mohsp-99/mizito';
+import type { MizitoContext } from '@mohsp-99/mizito';
+
+interface ToolResult {
+  [key: string]: unknown;
+  content: Array<{ type: 'text'; text: string }>;
+  isError?: boolean;
+}
 
 // Return a tool result carrying a JSON payload as pretty text. MCP clients show
 // the text; the JSON keeps it machine-readable for Claude to reason over.
-function json(payload) {
+function json(payload: unknown): ToolResult {
   return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
 }
 
-function failure(err) {
-  const message = String(err?.message || err);
+function failure(err: unknown): ToolResult {
+  const message = String((err as Error)?.message || err);
   return {
     isError: true,
     content: [{ type: 'text', text: `Mizito request failed: ${message}` }],
@@ -70,7 +71,7 @@ function failure(err) {
 // Every tool starts from a fresh context (a cheap `workspace/userId` bootstrap)
 // so workspace tokens are always current — the server process is long-lived and
 // cached tokens would eventually expire.
-async function withContext(run) {
+async function withContext(run: (ctx: MizitoContext) => unknown): Promise<ToolResult> {
   try {
     const ctx = await buildContext();
     return json(await run(ctx));

@@ -19,6 +19,9 @@ db/*.db-shm
 .playwright-mcp/
 *.tmp
 
+# Build output (rebuild with `npm run build`)
+packages/*/dist/
+
 # Local Claude Code harness state
 .claude/
 

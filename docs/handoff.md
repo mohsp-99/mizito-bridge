@@ -1,6 +1,9 @@
 # Mizito — Monorepo + TypeScript migration (implementation plan / handoff)
 
-**Status:** planned, not started · **Date:** 2026-07-13 · **Owner:** mohsp-99
+**Status:** ✅ executed 2026-07-13 — all three increments landed (see the three
+"Increment N" commits on `main`). Kept for the rationale and the old→new mapping;
+path references to `core/` and `apps/` below describe the pre-migration layout.
+· **Date:** 2026-07-13 · **Owner:** mohsp-99
 
 This document is the handoff for restructuring this repo from a single package into a
 **workspaces monorepo** with a **TypeScript core library** plus two consumers (crawler, MCP
@@ -365,14 +368,15 @@ are configured; `@mohsp-99/mizito` used from a scratch script gives autocomplete
 
 ## 11. Execution checklist
 
-- [ ] Confirm core package name (`@mohsp-99/mizito`?)
-- [ ] **Increment 1:** workspaces + relocation, paths fixed, all apps run (JS)
-- [ ] Commit checkpoint 1
-- [ ] **Increment 2:** core → TS, resource namespaces, token provider, error codes, tsup build
-- [ ] Commit checkpoint 2
-- [ ] **Increment 3:** dep hygiene, `node:test` suites, CI, docs refresh
-- [ ] Commit checkpoint 3
-- [ ] Decide publishing (which packages public) and cut versions
+- [x] Confirm core package name — went with the recommended `@mohsp-99/mizito`
+- [x] **Increment 1:** workspaces + relocation, paths fixed, all apps run (JS)
+- [x] Commit checkpoint 1
+- [x] **Increment 2:** core → TS, resource namespaces, token provider, error codes, tsup build
+- [x] Commit checkpoint 2
+- [x] **Increment 3:** dep hygiene, `node:test` suites (27 tests), CI workflow, docs refresh
+      (also converted the MCP server to TS per open question 2's recommendation)
+- [x] Commit checkpoint 3
+- [ ] Decide publishing (which packages public) and cut versions — **still open**
 
 ---
 

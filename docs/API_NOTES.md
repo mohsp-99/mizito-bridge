@@ -24,14 +24,16 @@ These are the facts the crawler is built on.
     bundle functions), so no browser/library is needed to reproduce them.
   - Response body carries `status` + `token` at the top level. **Success = `status` 1 or 5**
     (token present); `status 0` = wrong username/password; `status 7` = OTP required.
-  - Two implementations: the **browser login** (`apps/crawler/login.mjs`, credentials stay with
-    the user; needed for OTP/SSO) and the **headless login** (`core/login.js` /
-    `apps/crawler/relogin.mjs` — `npm run relogin`, replays this call for on-demand token
-    minting and automatic re-login).
+  - Two implementations: the **browser login** (`packages/mizito-crawler/src/login.mjs`,
+    credentials stay with the user; needed for OTP/SSO) and the **headless login**
+    (`packages/mizito/src/auth/login.ts` / `packages/mizito-crawler/src/relogin.mjs` —
+    `npm run relogin`, replays this call for on-demand token minting and automatic re-login).
 - **Every other call** authenticates with the header `x-token: <token>`
   (seen as `headers:{"x-token":d.getToken()}`). An **expired/invalid token → HTTP 401** with an
-  HTML error page; `core/http.js` raises a typed `MizitoApiError{httpStatus:401}` for it, which
-  `core/feed.js` uses to trigger automatic re-login when credentials are configured.
+  HTML error page; the transport (`packages/mizito/src/transport/http.ts`) raises a typed
+  `MizitoApiError{code:'auth'}` for it and gives the token provider one `onAuthExpired()`
+  retry — the `diskSession` provider (`packages/mizito/src/auth/providers.ts`) uses that to
+  re-login automatically when credentials are configured.
 - SSO login: `GET /capi/sso/login`. Uploads: `POST /api/content/upload`.
 
 ## Response envelope
@@ -42,13 +44,14 @@ Calls return JSON shaped like:
 { "status": 1, "data": <payload>, "msg": "" }
 ```
 
-`status === 1` (or `true`) means success. The API client in `core/http.js` unwraps
-`.data` automatically and throws `MizitoApiError` otherwise.
+`status === 1` (or `true`) means success. The transport in
+`packages/mizito/src/transport/http.ts` unwraps `.data` automatically and throws
+`MizitoApiError` otherwise.
 
 ## Endpoints
 
 Most data endpoints are built dynamically in the bundle, so they can't be scraped
-statically. They are discovered at runtime by `apps/crawler/discover.mjs`, which records
+statically. They are discovered at runtime by `packages/mizito-crawler/src/discover.mjs`, which records
 the live `/capi` traffic while browsing the workspace. See
 `data/_discovery/endpoints.json` after running `npm run discover`.
 
@@ -107,7 +110,8 @@ test) — not personal; avoid for "my tasks".
 
 **`workspace/switch` token shape varies.** It usually returns the standard
 `{status, data:{token}}` envelope, but sometimes `{token}` directly — extract with
-`sw.data?.token || sw.token` (handled in `core/feed.js`).
+`sw.data?.token || sw.token` (handled by `tokenFromSwitch` in
+`packages/mizito/src/resources/workspaces.ts`).
 
 ### The key insight: tasks are chat messages
 
@@ -138,8 +142,9 @@ The crawler fetches this for every task with `has_comments` and writes `comments
 
 All `POST`, act on the session's **active/scoped** workspace (switch first for another).
 Every one of these was exercised end-to-end against a real workspace and cleaned up — see
-`apps/crawler/write-probe.mjs` (`npm run test:write`). Wrapped in `core/mizito.js` (raw) and
-`core/write.js` (name-resolving, normalized); surfaced as MCP tools in `apps/mcp/index.mjs`.
+`packages/mizito-crawler/src/write-probe.mjs` (`npm run test:write`). Wrapped in
+`packages/mizito/src/resources/*.ts` (raw) and `packages/mizito/src/feeds/write.ts`
+(name-resolving, normalized); surfaced as MCP tools in `packages/mizito-mcp/src/index.ts`.
 
 | Endpoint | Payload | Returns / notes |
 | --- | --- | --- |
@@ -196,13 +201,12 @@ task/chat writes). All `POST`, act on the active/scoped workspace.
 `api_url + "/api/" + endpoint.replaceAll(".", "/")`. So a two-dot literal like
 `inbox.archive.sender` becomes `POST /api/inbox/archive/sender`.
 
-Wrapped in `core/mizito.js` (raw: `letters`, `letterThread`, `letterLabels`,
-`sendLetter`, `letterSeen`, `letterArchive`, `letterUnarchive`,
-`letterToggleBookmark`) and `core/letters.js` (name-resolving, normalized:
-`listLetters`, `readLetter`, `sendLetter`, `replyLetter`, `markLetterRead`,
-`archiveLetter`); surfaced as the `mizito_letters` / `mizito_read_letter` /
-`mizito_send_letter` / `mizito_reply_letter` / `mizito_mark_letter_read` /
-`mizito_archive_letter` MCP tools.
+Wrapped in `packages/mizito/src/resources/letters.ts` (raw: `getInbox`, `getHistory`,
+`getMessageLabels`, `send`, `seen`, `archive`, `unarchive`, `toggleBookmark`) and
+`packages/mizito/src/feeds/letters.ts` (name-resolving, normalized: `listLetters`,
+`readLetter`, `sendLetter`, `replyLetter`, `markLetterRead`, `archiveLetter`); surfaced
+as the `mizito_letters` / `mizito_read_letter` / `mizito_send_letter` /
+`mizito_reply_letter` / `mizito_mark_letter_read` / `mizito_archive_letter` MCP tools.
 
 ## Conversations (chat) — extra endpoints
 
@@ -222,8 +226,8 @@ Beyond the confirmed `chat/getDialogs` / `getFullChat` / `getHistory` / `getMess
 with a CDN `content` token), `messageMediaDocument` (`.media.document`), and
 `messageService` (group events).
 
-Wrapped in `core/mizito.js` (`chatView`, `searchMessages`, `createDialog`,
-`chatSeen`) and `core/conversations.js` (`listConversations`, `readConversation`,
+Wrapped in `packages/mizito/src/resources/chat.ts` (`getChatView`, `search`,
+`createDialog`, `seen`) and `packages/mizito/src/feeds/conversations.ts` (`listConversations`, `readConversation`,
 `messageUser`); surfaced as `mizito_conversations` / `mizito_read_conversation`, and
 `mizito_send_message` gained a `user` target (direct message) that opens the DM via
 `chat/createDialog`.

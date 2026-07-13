@@ -25,10 +25,11 @@
   },
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "login": "node packages/mizito-crawler/src/login.mjs",
     "relogin": "node packages/mizito-crawler/src/relogin.mjs",
-    "mcp": "node packages/mizito-mcp/src/index.mjs",
+    "mcp": "node packages/mizito-mcp/dist/index.js",
     "projects": "node packages/mizito-crawler/src/projects.mjs",
     "discover": "node packages/mizito-crawler/src/discover.mjs",
     "crawl": "node packages/mizito-crawler/src/crawl.mjs",

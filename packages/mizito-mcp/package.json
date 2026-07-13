@@ -28,12 +28,14 @@
   "bin": {
     "mizito-mcp": "bin/mizito-mcp.mjs"
   },
-  "main": "src/index.mjs",
+  "main": "dist/index.js",
   "scripts": {
-    "start": "node src/index.mjs"
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "start": "node dist/index.js"
   },
   "files": [
-    "src/",
+    "dist/",
     "bin/",
     "README.md",
     "LICENSE"

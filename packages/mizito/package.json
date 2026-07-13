@@ -42,7 +42,8 @@
     "build": "tsup",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/"
+    "pretest": "npm run build",
+    "test": "node --test"
   },
   "publishConfig": {
     "access": "public"
