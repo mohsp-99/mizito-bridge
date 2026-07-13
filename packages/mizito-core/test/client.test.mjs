@@ -1,7 +1,7 @@
 // The namespaced client and the createMizito back-compat facade.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createClient, createMizito, staticToken, taskFromMessage, CHAT_PAGE_SIZE, API_BASE } from '@mohsp-99/mizito';
+import { createClient, createMizito, staticToken, taskFromMessage, CHAT_PAGE_SIZE, API_BASE } from '@mohsp-99/mizito-core';
 
 const realFetch = globalThis.fetch;
 test.afterEach(() => {

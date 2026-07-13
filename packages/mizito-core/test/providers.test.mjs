@@ -18,7 +18,7 @@ delete process.env.MIZITO_USER;
 delete process.env.MIZITO_PASS;
 
 const { staticToken, diskSession, passwordSession, MizitoApiError, SESSION_CREATE_URL } =
-  await import('@mohsp-99/mizito');
+  await import('@mohsp-99/mizito-core');
 
 const realFetch = globalThis.fetch;
 test.afterEach(() => {

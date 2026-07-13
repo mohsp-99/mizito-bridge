@@ -9,10 +9,10 @@
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DATA_DIR, ROOT } from '@mohsp-99/mizito';
-import { taskFromMessage } from '@mohsp-99/mizito';
-import { extractFiles } from '@mohsp-99/mizito';
-import { readJson, exists, ensureDir, log } from '@mohsp-99/mizito';
+import { DATA_DIR, ROOT } from '@mohsp-99/mizito-core';
+import { taskFromMessage } from '@mohsp-99/mizito-core';
+import { extractFiles } from '@mohsp-99/mizito-core';
+import { readJson, exists, ensureDir, log } from '@mohsp-99/mizito-core';
 
 const DB_PATH = path.join(ROOT, 'db', 'mizito.db');
 const SCHEMA_PATH = path.join(ROOT, 'db', 'schema.sql');

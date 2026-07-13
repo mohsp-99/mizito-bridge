@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { stripHtml, slug } from '@mohsp-99/mizito';
+import { stripHtml, slug } from '@mohsp-99/mizito-core';
 
 test('stripHtml: block tags become newlines, inline tags vanish', () => {
   const html = '<div>سلام<br>دنیا</div><p>پاراگراف <b>بولد</b></p>';

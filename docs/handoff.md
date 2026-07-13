@@ -368,7 +368,8 @@ are configured; `@mohsp-99/mizito` used from a scratch script gives autocomplete
 
 ## 11. Execution checklist
 
-- [x] Confirm core package name — went with the recommended `@mohsp-99/mizito`
+- [x] Confirm core package name — initially the recommended `@mohsp-99/mizito`; renamed
+      to **`@mohsp-99/mizito-core`** before release (owner: bare "mizito" reads as official)
 - [x] **Increment 1:** workspaces + relocation, paths fixed, all apps run (JS)
 - [x] Commit checkpoint 1
 - [x] **Increment 2:** core → TS, resource namespaces, token provider, error codes, tsup build

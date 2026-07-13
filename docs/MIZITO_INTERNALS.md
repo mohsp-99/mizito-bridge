@@ -54,7 +54,7 @@ Two ways to obtain that token:
    themselves and we capture the resulting `localStorage` token plus cookies. Credentials never
    touch our code, and any future SMS/2FA/SSO step is handled by the user transparently. This is
    the right choice for first-time setup, OTP-gated accounts, and AD/SSO tenants.
-2. **Headless login** (`packages/mizito/src/auth/login.ts`, `packages/mizito-crawler/src/relogin.mjs`) — replay the call directly.
+2. **Headless login** (`packages/mizito-core/src/auth/login.ts`, `packages/mizito-crawler/src/relogin.mjs`) — replay the call directly.
    The client-side hashing was recovered from the bundle and **verified byte-for-byte** equal to
    Node's `crypto` hex digests (the MD5 is the open-source `gdi2290.md5-service`; the SHA-256 is
    the bundle's `sha256` factory), so the password field is just
@@ -187,8 +187,8 @@ implemented writes:
 
 One sharp edge: `tasks/removeTask` refuses a *completed* task (HTML "Bad Request") — reopen
 it first. Exact payloads and the full recovered surface are in
-[`API_NOTES.md`](./API_NOTES.md); the code lives in `packages/mizito/src/feeds/write.ts`
-(name-resolving layer) over `packages/mizito/src/resources/*.ts` (raw calls), and every
+[`API_NOTES.md`](./API_NOTES.md); the code lives in `packages/mizito-core/src/feeds/write.ts`
+(name-resolving layer) over `packages/mizito-core/src/resources/*.ts` (raw calls), and every
 write is exercised by `packages/mizito-crawler/src/write-probe.mjs`.
 
 ### Files / attachments
@@ -254,7 +254,7 @@ on its own.
   raises a typed `MizitoApiError{code:'auth'}` for it), or file downloads return the small
   "invalid" stub. Fix: re-login (`npm run login` or `npm run relogin`) and/or re-crawl, then
   download files promptly. When credentials are configured, the `diskSession` token provider
-  (`packages/mizito/src/auth/providers.ts`) **re-logs-in automatically** on that 401 and the
+  (`packages/mizito-core/src/auth/providers.ts`) **re-logs-in automatically** on that 401 and the
   transport retries once, so long-running tools (the MCP server) heal without intervention.
 - **App version pinning.** The bundle is fetched by version (`a_.js?v=1.0.4-589`). After a Mizito
   release, endpoint names/shapes can shift; re-run the discovery scripts to re-learn them.

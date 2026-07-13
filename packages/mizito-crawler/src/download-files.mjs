@@ -13,11 +13,11 @@
 // after a crawl — re-crawl if downloads start failing with auth errors.
 import fs from 'node:fs';
 import path from 'node:path';
-import { DATA_DIR } from '@mohsp-99/mizito';
-import { extractFiles } from '@mohsp-99/mizito';
-import { createMizito } from '@mohsp-99/mizito';
-import { requireToken } from '@mohsp-99/mizito';
-import { readJson, ensureDir, writeJson, exists, slug, log } from '@mohsp-99/mizito';
+import { DATA_DIR } from '@mohsp-99/mizito-core';
+import { extractFiles } from '@mohsp-99/mizito-core';
+import { createMizito } from '@mohsp-99/mizito-core';
+import { requireToken } from '@mohsp-99/mizito-core';
+import { readJson, ensureDir, writeJson, exists, slug, log } from '@mohsp-99/mizito-core';
 
 const CDN = 'https://app.mizito.ir/cdn/';
 const CONCURRENCY = 4;

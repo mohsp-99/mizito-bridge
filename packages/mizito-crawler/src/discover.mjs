@@ -12,8 +12,8 @@
 // (or wait for the idle timeout) and the catalogue is saved.
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { WEB_BASE, STORAGE_STATE_PATH, DATA_DIR, API_PREFIX } from '@mohsp-99/mizito';
-import { exists, ensureDir, writeJson, log, sleep } from '@mohsp-99/mizito';
+import { WEB_BASE, STORAGE_STATE_PATH, DATA_DIR, API_PREFIX } from '@mohsp-99/mizito-core';
+import { exists, ensureDir, writeJson, log, sleep } from '@mohsp-99/mizito-core';
 
 const OUT_DIR = path.join(DATA_DIR, '_discovery');
 const IDLE_TIMEOUT_MS = 90 * 1000; // stop after this much inactivity

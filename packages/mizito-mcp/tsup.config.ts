@@ -8,5 +8,5 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   // The core and the MCP SDK stay external — they resolve at runtime.
-  external: ['@mohsp-99/mizito', '@modelcontextprotocol/sdk', 'zod'],
+  external: ['@mohsp-99/mizito-core', '@modelcontextprotocol/sdk', 'zod'],
 });

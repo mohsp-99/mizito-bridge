@@ -1,4 +1,4 @@
-# @mohsp-99/mizito
+# @mohsp-99/mizito-core
 
 Typed client library for the [Mizito](https://office.mizito.ir) API — tasks, chat,
 letters (correspondence), projects, workspaces. Mizito has no public API; this library
@@ -12,7 +12,7 @@ dependencies** — just `fetch` and `crypto`.
 ## Install
 
 ```bash
-npm install @mohsp-99/mizito
+npm install @mohsp-99/mizito-core
 ```
 
 ## Sign in
@@ -42,7 +42,7 @@ directory, or `MIZITO_DATA_DIR` when set.
 ### The client — typed resource namespaces
 
 ```ts
-import { createClient } from '@mohsp-99/mizito';
+import { createClient } from '@mohsp-99/mizito-core';
 
 const client = createClient();                    // token via the default diskSession()
 const tasks = await client.tasks.getAll();        // every task in the active workspace
@@ -60,7 +60,7 @@ Namespaces map 1:1 to confirmed endpoints: `tasks`, `chat`, `projects`, `labels`
 ### Feeds — cross-workspace reads and name-resolving writes
 
 ```ts
-import { buildContext, overview, myTasks, unreadMessages, createTask, sendMessage } from '@mohsp-99/mizito';
+import { buildContext, overview, myTasks, unreadMessages, createTask, sendMessage } from '@mohsp-99/mizito-core';
 
 const ctx = await buildContext();                 // identity + workspaces, self-healing
 console.log(await overview(ctx));                 // per-workspace counters
@@ -77,7 +77,7 @@ await sendMessage(ctx, { project: 'Ops', text: 'Shipped ✅' });
 The transport never reads disk or env itself; it asks an injected provider:
 
 ```ts
-import { createClient, staticToken, diskSession, passwordSession } from '@mohsp-99/mizito';
+import { createClient, staticToken, diskSession, passwordSession } from '@mohsp-99/mizito-core';
 
 createClient({ token: 'raw-session-token' });                       // fixed token
 createClient({ tokens: diskSession({ path: '/srv/mizito/session.json' }) });

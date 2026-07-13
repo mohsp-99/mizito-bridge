@@ -1,5 +1,5 @@
 {
-  "name": "@mohsp-99/mizito",
+  "name": "@mohsp-99/mizito-core",
   "version": "0.1.1",
   "type": "module",
   "description": "Typed client library for the Mizito (office.mizito.ir) API — tasks, chat, letters, projects, workspaces. No browser, no server: log in with a saved session or credentials and call the API directly.",
@@ -9,7 +9,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mohsp-99/mizito-bridge.git",
-    "directory": "packages/mizito"
+    "directory": "packages/mizito-core"
   },
   "bugs": {
     "url": "https://github.com/mohsp-99/mizito-bridge/issues"

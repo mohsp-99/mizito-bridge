@@ -4,7 +4,7 @@ Bridge your [Mizito](https://office.mizito.ir) workspace to AI assistants and lo
 tooling. Mizito is a closed SaaS with no public API, so this repo provides — as three
 workspace packages on one shared core:
 
-- **[`@mohsp-99/mizito`](packages/mizito)** — a typed, dependency-free **TypeScript
+- **[`@mohsp-99/mizito-core`](packages/mizito-core)** — a typed, dependency-free **TypeScript
   client library** for Mizito's (unofficial) API: resource namespaces
   (`client.tasks.*`, `client.chat.*`, `client.letters.*`, …), cross-workspace feeds,
   and pluggable token providers with automatic re-login. Use it directly from any
@@ -51,7 +51,7 @@ npm install          # links the workspaces; also downloads Chromium for the bro
 npm run build        # builds the TypeScript core + MCP server into dist/
 ```
 
-The repo is an npm-workspaces monorepo (`packages/mizito`, `packages/mizito-crawler`,
+The repo is an npm-workspaces monorepo (`packages/mizito-core`, `packages/mizito-crawler`,
 `packages/mizito-mcp`). The root `mizito` CLI wraps every entry point (`login`, `mcp`,
 `projects`, `crawl`, `files`, `db`, `view`, `api`, …); `npm run <script>` works from the
 repo root.
@@ -289,7 +289,7 @@ node packages/mizito-crawler/src/capture-project.mjs  # capture a project's call
 
 ```
 bin/                      the `mizito` CLI dispatcher (one entry point over the package scripts)
-packages/mizito/          @mohsp-99/mizito — the core TypeScript library (zero dependencies)
+packages/mizito-core/          @mohsp-99/mizito-core — the core TypeScript library (zero dependencies)
   src/client.ts             createClient() → resource namespaces (tasks, chat, letters, …)
   src/transport/            fetch wrapper: envelope unwrap, retries, typed error codes
   src/auth/                 verified password hash, headless login, token providers
@@ -309,7 +309,7 @@ The core is a normal npm package — installing it pulls **no browser and no MCP
 and it ships types:
 
 ```ts
-import { createClient, buildContext, createTask, myTasks, passwordSession } from '@mohsp-99/mizito';
+import { createClient, buildContext, createTask, myTasks, passwordSession } from '@mohsp-99/mizito-core';
 
 // Low-level: typed resource namespaces over one workspace token.
 const client = createClient();                          // token from the saved session

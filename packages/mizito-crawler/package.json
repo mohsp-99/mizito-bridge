@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Browser login, workspace crawler, SQLite loader, attachment downloader, and local data viewer for Mizito — built on @mohsp-99/mizito. Run these from the repo root (or set MIZITO_DATA_DIR) so auth/, data/, db/ land in one place.",
+  "description": "Browser login, workspace crawler, SQLite loader, attachment downloader, and local data viewer for Mizito — built on @mohsp-99/mizito-core. Run these from the repo root (or set MIZITO_DATA_DIR) so auth/, data/, db/ land in one place.",
   "license": "MIT",
   "author": "mohsp-99",
   "engines": {
@@ -24,7 +24,7 @@
     "postinstall": "playwright install chromium || exit 0"
   },
   "dependencies": {
-    "@mohsp-99/mizito": "^0.1.0",
+    "@mohsp-99/mizito-core": "^0.1.1",
     "playwright": "^1.49.0"
   }
 }

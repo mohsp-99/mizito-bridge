@@ -10,10 +10,10 @@
 // and extracts the tasks embedded in project chat groups into a normalized
 // tasks.json. Works for any workspace on the account, active or not.
 import path from 'node:path';
-import { createMizito, taskFromMessage } from '@mohsp-99/mizito';
-import { requireToken } from '@mohsp-99/mizito';
-import { TARGET_WORKSPACE, DATA_DIR } from '@mohsp-99/mizito';
-import { writeJson, ensureDir, slug, log } from '@mohsp-99/mizito';
+import { createMizito, taskFromMessage } from '@mohsp-99/mizito-core';
+import { requireToken } from '@mohsp-99/mizito-core';
+import { TARGET_WORKSPACE, DATA_DIR } from '@mohsp-99/mizito-core';
+import { writeJson, ensureDir, slug, log } from '@mohsp-99/mizito-core';
 
 // Workspace name: CLI arg wins, then $WORKSPACE, then the configured default.
 // When none is given, crawl the account's currently-active workspace.

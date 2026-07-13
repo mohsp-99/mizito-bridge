@@ -5,7 +5,7 @@ lets an AI client (Claude Desktop / Claude Code) both **read** your Mizito accou
 tasks, unread messages, conversations, formal letters — **and act on it**: create/edit/
 comment/progress/complete tasks, send chat messages, send and reply to letters.
 
-Built on [`@mohsp-99/mizito`](https://www.npmjs.com/package/@mohsp-99/mizito), the typed
+Built on [`@mohsp-99/mizito-core`](https://www.npmjs.com/package/@mohsp-99/mizito-core), the typed
 (unofficial) Mizito client. No browser required.
 
 > **Writes to your account.** MCP clients prompt before each tool call, so you allow or

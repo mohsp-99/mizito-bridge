@@ -2,7 +2,7 @@
   "name": "@mohsp-99/mizito-mcp",
   "version": "0.1.1",
   "type": "module",
-  "description": "MCP server exposing your Mizito (office.mizito.ir) account to AI tools over stdio: read tasks/messages/letters AND create tasks, comment, and send messages — built on @mohsp-99/mizito.",
+  "description": "MCP server exposing your Mizito (office.mizito.ir) account to AI tools over stdio: read tasks/messages/letters AND create tasks, comment, and send messages — built on @mohsp-99/mizito-core.",
   "license": "MIT",
   "author": "mohsp-99",
   "homepage": "https://github.com/mohsp-99/mizito-bridge#readme",
@@ -45,7 +45,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@mohsp-99/mizito": "^0.1.1",
+    "@mohsp-99/mizito-core": "^0.1.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.4.3"
   }

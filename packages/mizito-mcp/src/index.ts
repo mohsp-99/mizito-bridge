@@ -45,8 +45,8 @@ import {
   listConversations,
   readConversation,
   messageUser,
-} from '@mohsp-99/mizito';
-import type { MizitoContext } from '@mohsp-99/mizito';
+} from '@mohsp-99/mizito-core';
+import type { MizitoContext } from '@mohsp-99/mizito-core';
 
 interface ToolResult {
   [key: string]: unknown;

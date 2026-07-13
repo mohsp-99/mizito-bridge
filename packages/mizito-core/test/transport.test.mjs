@@ -2,7 +2,7 @@
 // the error-code taxonomy, transient retries, and the refresh-on-401 flow.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createHttp, staticToken, MizitoApiError, codeForHttpStatus, API_BASE } from '@mohsp-99/mizito';
+import { createHttp, staticToken, MizitoApiError, codeForHttpStatus, API_BASE } from '@mohsp-99/mizito-core';
 
 const realFetch = globalThis.fetch;
 test.afterEach(() => {

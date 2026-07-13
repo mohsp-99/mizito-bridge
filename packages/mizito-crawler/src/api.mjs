@@ -8,8 +8,8 @@
 //   node scripts/api.mjs tasks/upcoming '{"outbox":true,"from_dashboard":true}'
 //
 // Uses the saved session token. Prints the unwrapped response as JSON.
-import { createClient } from '@mohsp-99/mizito';
-import { requireToken } from '@mohsp-99/mizito';
+import { createClient } from '@mohsp-99/mizito-core';
+import { requireToken } from '@mohsp-99/mizito-core';
 
 const [endpoint, payloadArg] = process.argv.slice(2);
 if (!endpoint) {

@@ -9,8 +9,8 @@
 // Verifies, in order: tasks/add, tasks/getComments, tasks/newComment,
 // tasks/getComments (again), tasks/updateProgress, chat/send — then removes the
 // test message and task.
-import { createClient } from '@mohsp-99/mizito';
-import { loadToken } from '@mohsp-99/mizito';
+import { createClient } from '@mohsp-99/mizito-core';
+import { loadToken } from '@mohsp-99/mizito-core';
 
 const line = (s) => console.log(s);
 const ok = (s) => console.log('  ✓ ' + s);

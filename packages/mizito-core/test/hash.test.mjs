@@ -5,7 +5,7 @@
 // the headless login breaks.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { hashPassword } from '@mohsp-99/mizito';
+import { hashPassword } from '@mohsp-99/mizito-core';
 
 const VECTORS = [
   [
