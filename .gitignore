@@ -1,19 +1,20 @@
 node_modules/
 
-# Secrets / session — never commit
-auth/
+# Secrets / session — never commit. Anchored to the repo root so these
+# runtime dirs don't also swallow source dirs like packages/*/src/auth/.
+/auth/
 .env
 
 # Crawled output (can be large; regenerate from a crawl)
-data/
+/data/
 
 # Downloaded attachments (via mizito_download_file)
-downloads/
+/downloads/
 
 # Generated SQLite database (rebuild with `npm run db`)
-db/*.db
-db/*.db-wal
-db/*.db-shm
+/db/*.db
+/db/*.db-wal
+/db/*.db-shm
 
 # Playwright MCP scratch artifacts
 .playwright-mcp/
