@@ -11,6 +11,7 @@
 // unread messages — across all workspaces or one.
 import { createMizito } from './mizito.js';
 import { loadToken } from './auth.js';
+import { reauthenticate, hasCredentials } from './login.js';
 
 // The `workspace/switch` response shape varies (sometimes `{token}`, sometimes
 // the standard `{data:{token}}` envelope). Pull the token out of either.
@@ -20,15 +21,56 @@ function tokenFromSwitch(sw) {
   return sw.data?.token || sw.token || null;
 }
 
-// Bootstrap: identity + the account's workspaces. Throws a clear error if there
-// is no saved session.
-export async function buildContext(token = loadToken()) {
-  if (!token) {
-    throw new Error('No Mizito session found. Run `npm run login` to sign in first.');
-  }
+// Is this error an auth failure (expired/invalid token) rather than a transient
+// server/network problem? The bootstrap call (workspace/userId) is parameterless,
+// so a rejected envelope from it almost always means the token is bad. We
+// exclude 429/5xx so we don't burn credentials on a passing storm.
+function isAuthError(err) {
+  if (!err) return false;
+  if (err.httpStatus === 401 || err.httpStatus === 403) return true;
+  if (err.httpStatus === 429 || err.httpStatus >= 500) return false;
+  return err.name === 'MizitoApiError';
+}
+
+// Try a bootstrap with a given token; returns the context or throws.
+async function bootstrapWith(token) {
   const root = createMizito({ token });
   const boot = await root.bootstrap();
   return { token, root, boot };
+}
+
+// Bootstrap: identity + the account's workspaces. Prefers the saved session
+// token; if it's missing or expired AND credentials are configured (env
+// MIZITO_USERNAME/MIZITO_PASSWORD or auth/credentials.json), it logs in headless
+// and retries once — so a stale session heals itself instead of erroring. Falls
+// back to a clear "run `npm run login`" message when it can't self-heal.
+export async function buildContext(token = loadToken()) {
+  if (token) {
+    try {
+      return await bootstrapWith(token);
+    } catch (err) {
+      // Only re-login on an auth failure we can actually fix with credentials.
+      if (!isAuthError(err) || !hasCredentials()) {
+        if (isAuthError(err) && !hasCredentials()) {
+          throw new Error(
+            'Mizito session is invalid or expired. Run `npm run login`, or set ' +
+              'MIZITO_USERNAME/MIZITO_PASSWORD (or auth/credentials.json) for automatic re-login.',
+          );
+        }
+        throw err;
+      }
+      console.error('[mizito] session expired — re-authenticating with stored credentials…');
+    }
+  }
+
+  if (!hasCredentials()) {
+    throw new Error(
+      'No Mizito session found. Run `npm run login` to sign in, or set ' +
+        'MIZITO_USERNAME/MIZITO_PASSWORD (or auth/credentials.json) for automatic login.',
+    );
+  }
+  const fresh = await reauthenticate(); // throws with a clear message on bad creds
+  return bootstrapWith(fresh.token);
 }
 
 // A Mizito client scoped to one workspace descriptor `{_id, title, active}`.

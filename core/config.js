@@ -20,6 +20,9 @@ export const API_BASE = 'https://app.mizito.ir';
 export const API_PREFIX = '/api';
 export const LOGIN_PREFIX = '/capi';
 
+// Headless login endpoint (password -> session token). See core/login.js.
+export const SESSION_CREATE_URL = `${API_BASE}${LOGIN_PREFIX}/session/create`;
+
 // Header the SPA uses to authenticate every /capi call.
 export const TOKEN_HEADER = 'x-token';
 
@@ -28,6 +31,9 @@ export const AUTH_DIR = path.join(ROOT, 'auth');
 export const DATA_DIR = path.join(ROOT, 'data');
 export const STORAGE_STATE_PATH = path.join(AUTH_DIR, 'storageState.json');
 export const SESSION_PATH = path.join(AUTH_DIR, 'session.json'); // { token, savedAt, user? }
+// Optional stored credentials for headless / automatic re-login. Gitignored
+// (the whole auth/ dir is). Env vars take precedence — see core/login.js.
+export const CREDENTIALS_PATH = path.join(AUTH_DIR, 'credentials.json'); // { username, password }
 
 // Default workspace to crawl. Set the WORKSPACE env var (or pass a name on the
 // CLI) to pick one; when empty, the crawler uses the account's active workspace.

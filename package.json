@@ -44,6 +44,7 @@
   ],
   "scripts": {
     "login": "node apps/crawler/login.mjs",
+    "relogin": "node apps/crawler/relogin.mjs",
     "mcp": "node apps/mcp/index.mjs",
     "projects": "node apps/crawler/projects.mjs",
     "discover": "node apps/crawler/discover.mjs",

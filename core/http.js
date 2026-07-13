@@ -57,6 +57,18 @@ export function createClient({ token = loadToken(), pacingMs = 250 } = {}) {
           json = { _nonJson: true, _raw: text };
         }
 
+        // Expired/invalid session token → the API answers 401 (an HTML error
+        // page, not a JSON envelope). Surface it as a typed error so callers —
+        // and the automatic re-login in core/feed.js — can react instead of
+        // silently getting a junk body. Retrying won't help, so it breaks the
+        // retry loop below (it isn't classified retriable).
+        if (res.status === 401 || res.status === 403) {
+          throw new MizitoApiError(`HTTP ${res.status} (auth) from ${endpoint}`, {
+            httpStatus: res.status,
+            endpoint,
+            body: json,
+          });
+        }
         if (res.status === 429 || res.status >= 500) {
           throw new MizitoApiError(`HTTP ${res.status} from ${endpoint}`, {
             httpStatus: res.status,

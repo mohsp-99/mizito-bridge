@@ -14,16 +14,24 @@ These are the facts the crawler is built on.
 ## Auth
 
 - **Login**: `POST https://app.mizito.ir/capi/session/create`
-  - Body: `{ username, password, loginCode, regId }`
+  - Body: `{ username, password, loginCode, regId }`. `username` = phone; `loginCode` = SMS/OTP
+    (empty for password-only); `regId` = push-device id (**`null` is accepted**).
   - `password` is **not** sent in plaintext: the SPA sends
     `md5(password) + "|" + sha256(password)` (from `i.createHash(a)+"|"+r.convertToSHA256(a)`),
-    *unless* the tenant uses dedicated AD/SSO, in which case the raw password is sent.
-  - Response is the standard envelope; on success the token is stored in
-    `localStorage.token` and `sessionStorage.token`.
-  - Because of the hashing, we log in via a real browser instead of replaying this
-    call — see `apps/crawler/login.mjs`.
+    *unless* the tenant uses dedicated AD/SSO, in which case the raw password is sent. Both
+    hashes are **lowercase hex** and **verified byte-for-byte** equal to Node's
+    `crypto.createHash('md5'|'sha256').digest('hex')` (test-vector checked against the extracted
+    bundle functions), so no browser/library is needed to reproduce them.
+  - Response body carries `status` + `token` at the top level. **Success = `status` 1 or 5**
+    (token present); `status 0` = wrong username/password; `status 7` = OTP required.
+  - Two implementations: the **browser login** (`apps/crawler/login.mjs`, credentials stay with
+    the user; needed for OTP/SSO) and the **headless login** (`core/login.js` /
+    `apps/crawler/relogin.mjs` — `npm run relogin`, replays this call for on-demand token
+    minting and automatic re-login).
 - **Every other call** authenticates with the header `x-token: <token>`
-  (seen as `headers:{"x-token":d.getToken()}`).
+  (seen as `headers:{"x-token":d.getToken()}`). An **expired/invalid token → HTTP 401** with an
+  HTML error page; `core/http.js` raises a typed `MizitoApiError{httpStatus:401}` for it, which
+  `core/feed.js` uses to trigger automatic re-login when credentials are configured.
 - SSO login: `GET /capi/sso/login`. Uploads: `POST /api/content/upload`.
 
 ## Response envelope

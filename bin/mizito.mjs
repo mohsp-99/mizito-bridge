@@ -5,6 +5,7 @@
 // works via `npx @mohsp-99/mizito-bridge <command>` or a global install.
 //
 //   mizito login          sign in via a real browser (saves the session)
+//   mizito relogin        headless password login / refresh an expired session
 //   mizito mcp            run the MCP server over stdio (for Claude Desktop/Code)
 //   mizito projects       list projects/boards in the active workspace
 //   mizito crawl [ws]     crawl a workspace snapshot to data/
@@ -26,6 +27,7 @@ const ROOT = path.resolve(__dirname, '..');
 // command -> script, relative to the package root.
 const COMMANDS = {
   login: 'apps/crawler/login.mjs',
+  relogin: 'apps/crawler/relogin.mjs',
   mcp: 'apps/mcp/index.mjs',
   projects: 'apps/crawler/projects.mjs',
   crawl: 'apps/crawler/crawl.mjs',
@@ -49,6 +51,7 @@ function help() {
     '',
     'Commands:',
     '  login          sign in via a real browser (saves the session)',
+    '  relogin        headless password login / refresh an expired session',
     '  mcp            run the MCP server over stdio (Claude Desktop / Claude Code)',
     '  projects       list projects & boards in the active workspace',
     '  crawl [ws]     crawl a workspace snapshot to data/',

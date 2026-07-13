@@ -53,19 +53,47 @@ npx @mohsp-99/mizito-bridge help      # all commands
 The `mizito` command wraps every entry point (`login`, `mcp`, `projects`, `crawl`,
 `files`, `db`, `view`, `api`, …); `npm run <script>` still works from a clone.
 
-## Sign in (once)
+## Sign in
+
+Two ways to get a session — pick per your setup:
+
+**Browser login** (works for every account, incl. SMS/2FA and AD/SSO):
 
 ```bash
 npm run login
 ```
 
-This opens a browser at the Mizito login page. Log in by hand (including any SMS/2FA).
-Once the app stores a token, the session is saved to `auth/` (git-ignored). The token is
-long-lived but can be invalidated server-side — if calls later fail with auth errors,
-just run `npm run login` again.
+Opens a browser at the Mizito login page. Log in by hand; once the app stores a token, the
+session is saved to `auth/` (git-ignored). Credentials never touch this code.
 
-> `auth/session.json` grants access to your account. **Treat it like a password** and
-> never commit or share it (it's git-ignored by default).
+**Headless login** (password-only accounts — no browser, and the token can be refreshed
+on demand). Provide credentials via environment variables:
+
+```bash
+export MIZITO_USERNAME=09xxxxxxxxx      # your phone number
+export MIZITO_PASSWORD='your-password'
+npm run relogin
+```
+
+…or a git-ignored `auth/credentials.json`:
+
+```json
+{ "username": "09xxxxxxxxx", "password": "your-password" }
+```
+
+The password is sent exactly as the web app sends it — `md5(pw)|sha256(pw)`, verified
+byte-for-byte against Mizito's own bundle — so no browser is needed. If your account ever
+asks for a one-time code, pass it: `npm run relogin -- --code 123456`.
+
+**Automatic re-login.** Mizito sessions expire every few days. When credentials are
+configured (env vars or `auth/credentials.json`), the tools detect the resulting `401` and
+re-login transparently on the next call — so the MCP server keeps working without you
+re-running anything. Without credentials, a stale session just asks you to sign in again.
+
+> `auth/session.json` grants access to your account, and `auth/credentials.json` /
+> `MIZITO_PASSWORD` are password-equivalent secrets. **Treat them like a password** — never
+> commit or share them (the whole `auth/` dir is git-ignored by default). Prefer the browser
+> login if you'd rather not store a password on disk.
 
 ---
 
@@ -250,11 +278,11 @@ node apps/crawler/capture-project.mjs # capture a project's calls by driving the
 bin/           the `mizito` CLI dispatcher (one entry point over the app scripts)
 index.js       programmatic entry point (import the read/write helpers in your own code)
 core/          config + auth + API client + read (feed) + write + letters + conversations layers
-apps/crawler/  login / discover / crawl / files / db / projects / write-probe entry points
+apps/crawler/  login / relogin / discover / crawl / files / db / projects / write-probe entry points
 apps/viewer/   local data browser
 apps/mcp/      MCP server — read + write tools (Claude Desktop / Claude Code)
 docs/          how Mizito works + reverse-engineering notes (incl. write endpoints)
-auth/          saved session (git-ignored — never commit)
+auth/          saved session + optional credentials (git-ignored — never commit)
 data/          crawl output (git-ignored)
 db/            SQLite store (git-ignored)
 ```
@@ -284,7 +312,11 @@ Full details:
 ## Security & limitations
 
 - The session token is like a password — keep `auth/` private (git-ignored by default).
-- The token can expire/be revoked server-side; re-run `npm run login` when it does.
+  Stored login credentials (`auth/credentials.json` / `MIZITO_PASSWORD`) are the same:
+  password-equivalent. If you'd rather not store a password, use the browser login only.
+- The token expires every few days (or can be revoked server-side). Re-run `npm run login`
+  (or `npm run relogin`) when it does — or configure credentials so re-login happens
+  automatically on the next call.
 - File/content tokens expire quickly — download attachments soon after a crawl.
 - Endpoints are reverse-engineered and **version-pinned**; a Mizito update can change
   them. Re-run the discovery tools to re-learn the API.

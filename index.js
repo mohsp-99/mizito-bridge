@@ -14,6 +14,15 @@ export { createClient, MizitoApiError } from './core/http.js';
 export { createMizito, taskFromMessage } from './core/mizito.js';
 export { loadToken, saveSession, requireToken } from './core/auth.js';
 
+// Headless login (password -> token) + automatic re-login on expiry.
+export {
+  createSession,
+  hashPassword,
+  loadCredentials,
+  hasCredentials,
+  reauthenticate,
+} from './core/login.js';
+
 // Read layer (personal feeds, across or within a workspace).
 export {
   buildContext,

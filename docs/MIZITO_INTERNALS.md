@@ -44,14 +44,25 @@ error.
 Login is `POST /capi/session/create` with `{ username, password, loginCode, regId }`.
 The password is **not** sent in clear: the SPA sends `md5(password) + "|" + sha256(password)`
 (unless the tenant uses dedicated AD/SSO, where the raw password is sent). On success the
-backend returns a **session token**, which the SPA stores in `localStorage.token` /
-`sessionStorage.token`.
+backend returns a **session token** (status `1` or `5`, token at the top level of the body),
+which the SPA stores in `localStorage.token` / `sessionStorage.token`. A wrong
+username/password returns `{ status: 0 }`; a login needing a one-time code returns `status 7`.
 
-We deliberately **do not replay the login call**. Reproducing the exact client-side hashing
-(and any future SMS/2FA step) is brittle and would mean handling the user's password. Instead
-we drive a **real browser**: the person logs in themselves, and we capture the resulting
-`localStorage` token plus cookies. This keeps credentials with the user and survives changes
-to the login mechanics.
+Two ways to obtain that token:
+
+1. **Browser login** (`apps/crawler/login.mjs`) — drive a real Chromium; the person logs in
+   themselves and we capture the resulting `localStorage` token plus cookies. Credentials never
+   touch our code, and any future SMS/2FA/SSO step is handled by the user transparently. This is
+   the right choice for first-time setup, OTP-gated accounts, and AD/SSO tenants.
+2. **Headless login** (`core/login.js`, `apps/crawler/relogin.mjs`) — replay the call directly.
+   The client-side hashing was recovered from the bundle and **verified byte-for-byte** equal to
+   Node's `crypto` hex digests (the MD5 is the open-source `gdi2290.md5-service`; the SHA-256 is
+   the bundle's `sha256` factory), so the password field is just
+   `md5_hex(pw) + "|" + sha256_hex(pw)` with no browser and no extra dependency. This lets a
+   password-only account mint a fresh token **on demand**, which is what makes automatic
+   re-login possible (see §8). It needs the user's credentials (env `MIZITO_USERNAME` /
+   `MIZITO_PASSWORD`, or the gitignored `auth/credentials.json`) — a security trade-off the
+   browser flow avoids.
 
 ### Authenticated requests
 
@@ -238,12 +249,17 @@ on its own.
 
 ## 8. Maintenance / failure modes
 
-- **Token expiry.** The session token and the per-file content tokens expire. Symptoms: data
-  calls start failing auth, or file downloads return the small "invalid" stub. Fix: re-login
-  and/or re-crawl, then download files promptly.
+- **Token expiry.** The session token and the per-file content tokens expire (the session
+  every few days). Symptoms: data calls return **HTTP 401** (an HTML error page — the client
+  raises a typed `MizitoApiError{httpStatus:401}` for it), or file downloads return the small
+  "invalid" stub. Fix: re-login (`npm run login` or `npm run relogin`) and/or re-crawl, then
+  download files promptly. When credentials are configured, `buildContext` (core/feed.js)
+  **re-logs-in automatically** on that 401 and retries once, so long-running tools (the MCP
+  server) heal without intervention.
 - **App version pinning.** The bundle is fetched by version (`a_.js?v=1.0.4-589`). After a Mizito
   release, endpoint names/shapes can shift; re-run the discovery scripts to re-learn them.
-- **New auth steps.** Because we log in via a real browser, added SMS/2FA/SSO steps are handled
-  by the user transparently — no code change needed.
+- **New auth steps.** The browser login handles added SMS/2FA/SSO steps transparently (the user
+  completes them in the window). Headless login is password-only: if Mizito starts requiring an
+  OTP (`status 7`), pass it via `--code`/`loginCode`, or fall back to the browser login.
 - **Rate / politeness.** Calls are paced and retried with backoff; pagination and file downloads
   are bounded and resumable.
