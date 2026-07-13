@@ -103,7 +103,7 @@ export { ensureDir, writeJson, readJson, exists, log, stripHtml, slug, sleep } f
 export { docOf, extractFiles } from './files.js';
 export type { FileDescriptor } from './files.js';
 
-// API entity shapes (reverse-engineered; see src/types/index.ts for caveats).
+// API entity shapes (observed from the live API; see src/types/index.ts for caveats).
 export type {
   Envelope,
   Workspace,

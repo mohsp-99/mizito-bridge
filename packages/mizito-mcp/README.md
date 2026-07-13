@@ -6,7 +6,7 @@ tasks, unread messages, conversations, formal letters — **and act on it**: cre
 comment/progress/complete tasks, send chat messages, send and reply to letters.
 
 Built on [`@mohsp-99/mizito`](https://www.npmjs.com/package/@mohsp-99/mizito), the typed
-(reverse-engineered) Mizito client. No browser required.
+(unofficial) Mizito client. No browser required.
 
 > **Writes to your account.** MCP clients prompt before each tool call, so you allow or
 > decline per action. **Unofficial** — not affiliated with Mizito; use on your own

@@ -1,8 +1,8 @@
 {
   "name": "@mohsp-99/mizito",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
-  "description": "Typed client library for the Mizito (office.mizito.ir) API — tasks, chat, letters, projects, workspaces. Reverse-engineered, no browser, no server: log in with a saved session or credentials and call the API directly.",
+  "description": "Typed client library for the Mizito (office.mizito.ir) API — tasks, chat, letters, projects, workspaces. No browser, no server: log in with a saved session or credentials and call the API directly.",
   "license": "MIT",
   "author": "mohsp-99",
   "homepage": "https://github.com/mohsp-99/mizito-bridge#readme",

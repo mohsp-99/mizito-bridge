@@ -5,7 +5,7 @@ tooling. Mizito is a closed SaaS with no public API, so this repo provides — a
 workspace packages on one shared core:
 
 - **[`@mohsp-99/mizito`](packages/mizito)** — a typed, dependency-free **TypeScript
-  client library** for Mizito's (reverse-engineered) API: resource namespaces
+  client library** for Mizito's (unofficial) API: resource namespaces
   (`client.tasks.*`, `client.chat.*`, `client.letters.*`, …), cross-workspace feeds,
   and pluggable token providers with automatic re-login. Use it directly from any
   Node ≥ 20 script — no browser, no server.
@@ -27,7 +27,7 @@ the session token is saved locally and reused.
 > action (or tell the assistant up front you don't want it writing). The read tools and
 > the crawler never mutate anything.
 
-> **Unofficial.** Not affiliated with Mizito; the API is reverse-engineered and
+> **Unofficial.** Not affiliated with Mizito; the API is undocumented and
 > version-pinned, so a Mizito update can change it. Use it on your own account and
 > respect Mizito's terms of service.
 
@@ -294,10 +294,10 @@ packages/mizito/          @mohsp-99/mizito — the core TypeScript library (zero
   src/transport/            fetch wrapper: envelope unwrap, retries, typed error codes
   src/auth/                 verified password hash, headless login, token providers
   src/feeds/                cross-workspace reads + name-resolving write layer
-  src/types/                reverse-engineered API shapes (Task, Dialog, Letter, …)
+  src/types/                observed API shapes (Task, Dialog, Letter, …)
 packages/mizito-crawler/  login / relogin / discover / crawl / files / db / viewer / probes
 packages/mizito-mcp/      MCP server — read + write tools (Claude Desktop / Claude Code)
-docs/                     how Mizito works + reverse-engineering notes (incl. write endpoints)
+docs/                     how Mizito works + API notes (incl. write endpoints)
 auth/                     saved session + optional credentials (git-ignored — never commit)
 data/                     crawl output (git-ignored)
 db/                       SQLite store (git-ignored)
@@ -350,7 +350,7 @@ Full details:
   (or `npm run relogin`) when it does — or configure credentials so re-login happens
   automatically on the next call.
 - File/content tokens expire quickly — download attachments soon after a crawl.
-- Endpoints are reverse-engineered and **version-pinned**; a Mizito update can change
+- Endpoints are undocumented and **version-pinned**; a Mizito update can change
   them. Re-run the discovery tools to re-learn the API.
 
 ## License

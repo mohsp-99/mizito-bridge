@@ -1,4 +1,4 @@
-// Shapes of the Mizito API, as observed by reverse engineering (app bundle
+// Shapes of the Mizito API, as observed from the live app (version
 // 1.0.4-589 — see docs/API_NOTES.md). There is no published contract, so every
 // interface is deliberately permissive: fields we have confirmed are typed,
 // everything else passes through via an index signature. Do not "tighten" these

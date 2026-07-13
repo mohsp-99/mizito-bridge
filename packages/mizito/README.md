@@ -1,12 +1,12 @@
 # @mohsp-99/mizito
 
 Typed client library for the [Mizito](https://office.mizito.ir) API — tasks, chat,
-letters (correspondence), projects, workspaces. Mizito is a closed SaaS with no public
-API; this library reproduces the web app's own calls (reverse-engineered, version-pinned)
-so you can read **and write** your account from any Node ≥ 20 script. **No browser, no
-server, zero dependencies** — just `fetch` and `crypto`.
+letters (correspondence), projects, workspaces. Mizito has no public API; this library
+speaks the same API the web app itself uses (unofficial, version-pinned) so you can read
+**and write** your account from any Node ≥ 20 script. **No browser, no server, zero
+dependencies** — just `fetch` and `crypto`.
 
-> **Unofficial.** Not affiliated with Mizito. Endpoints track app bundle `1.0.4-589`; a
+> **Unofficial.** Not affiliated with Mizito. Endpoints track app version `1.0.4-589`; a
 > Mizito update can change them. Use it on your own account and respect Mizito's terms.
 
 ## Install
@@ -17,9 +17,9 @@ npm install @mohsp-99/mizito
 
 ## Sign in
 
-The library authenticates with Mizito's session token, obtained by replaying the app's
-own password login (the password is sent exactly as the web app sends it:
-`md5(pw)|sha256(pw)`, verified byte-for-byte against Mizito's bundle).
+The library authenticates with Mizito's session token, obtained through the app's own
+password login (the password is sent exactly as the web app sends it:
+`md5(pw)|sha256(pw)`, verified byte-for-byte).
 
 The simplest setup — environment variables:
 
@@ -99,8 +99,8 @@ envelope rejected the call) · `network` · `not_found`.
 - [`@mohsp-99/mizito-mcp`](https://www.npmjs.com/package/@mohsp-99/mizito-mcp) — MCP
   server exposing these reads/writes to Claude Desktop / Claude Code.
 - [mizito-bridge repo](https://github.com/mohsp-99/mizito-bridge) — the monorepo, incl.
-  the browser login, workspace crawler, SQLite loader, and data viewer, plus the
-  reverse-engineering notes (`docs/API_NOTES.md`, `docs/MIZITO_INTERNALS.md`).
+  the browser login, workspace crawler, SQLite loader, and data viewer, plus the API
+  notes (`docs/API_NOTES.md`, `docs/MIZITO_INTERNALS.md`).
 
 ## License
 
