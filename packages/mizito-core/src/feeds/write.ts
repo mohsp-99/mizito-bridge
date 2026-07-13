@@ -18,7 +18,64 @@ import type { MizitoClient } from '../client.js';
 import { taskFromMessage, CHAT_PAGE_SIZE } from '../resources/chat.js';
 import { ROOT } from '../config.js';
 import { ensureDir, slug } from '../util.js';
-import type { Attachment, KanbanBoard, Member, Project, Task } from '../types/index.js';
+import type { UploadInput } from '../resources/content.js';
+import type { Attachment, KanbanBoard, Member, Project, Task, UploadedDocument } from '../types/index.js';
+
+// --- attachments (the write-half of files) -------------------------------
+// A file to upload as part of a write. `data` is the bytes (Blob/File,
+// Uint8Array, or ArrayBuffer); the rest mirror content.upload's options.
+export interface FileUpload {
+  data: UploadInput;
+  filename?: string;
+  maxWidthHeight?: number;
+  sendAsFile?: boolean;
+}
+
+// Options shared by writes that can carry attachments.
+export interface AttachmentOptions {
+  /** Already-uploaded documents (from uploadFile / client.content.upload). */
+  attachments?: UploadedDocument[];
+  /** Files to upload (into the write's workspace) and attach in one call. */
+  files?: FileUpload[];
+}
+
+// Upload each `files` entry via the given (workspace-scoped) client and return
+// the full attachment list (pre-uploaded documents first, then the new ones).
+async function collectAttachments(
+  mz: MizitoClient,
+  { attachments = [], files = [] }: AttachmentOptions,
+): Promise<UploadedDocument[]> {
+  const uploaded: UploadedDocument[] = [];
+  for (const f of files) {
+    uploaded.push(
+      await mz.content.upload(f.data, {
+        filename: f.filename,
+        maxWidthHeight: f.maxWidthHeight,
+        sendAsFile: f.sendAsFile,
+      }),
+    );
+  }
+  return [...attachments, ...uploaded];
+}
+
+// Upload a file into a specific workspace and return the created document, so a
+// caller can attach it to a later write. The workspace scoping matters: content
+// tokens are workspace-scoped (see downloadAttachment).
+export async function uploadFile(
+  ctx: MizitoContext,
+  {
+    workspace,
+    data,
+    filename,
+    maxWidthHeight,
+    sendAsFile,
+  }: { workspace?: string; data: UploadInput; filename?: string; maxWidthHeight?: number; sendAsFile?: boolean },
+): Promise<{ workspace: string; document: UploadedDocument }> {
+  if (data == null) throw new Error('data (the file bytes) is required.');
+  const { mz, ws } = await resolveWorkspace(ctx, { workspace });
+  const document = await mz.content.upload(data, { filename, maxWidthHeight, sendAsFile });
+  return { workspace: ws.title, document };
+}
 
 // --- small helpers -------------------------------------------------------
 // A few of these (norm, fullName, findByName, loadMembers, loadProjects,
@@ -224,7 +281,7 @@ export async function listProjects(ctx: MizitoContext, { workspace }: { workspac
 // ---------------------------------------------------------------------------
 // Create / define a task.
 // ---------------------------------------------------------------------------
-export interface CreateTaskInput {
+export interface CreateTaskInput extends AttachmentOptions {
   workspace?: string;
   project?: string;
   board?: string;
@@ -252,6 +309,8 @@ export async function createTask(
     progress = 0,
     labels = [],
     postToChat = true,
+    attachments = [],
+    files = [],
   }: CreateTaskInput,
 ) {
   if (!title || !String(title).trim()) throw new Error('title is required.');
@@ -286,6 +345,8 @@ export async function createTask(
     });
   }
 
+  const attachmentDocs = await collectAttachments(mz, { attachments, files });
+
   const payload = {
     title: String(title).trim(),
     notes: notes ?? '',
@@ -293,7 +354,7 @@ export async function createTask(
     project: proj?._id ?? null,
     kanban_board: proj ? boardId(boardObj) : null,
     labels: labels ?? [],
-    attachments: [],
+    attachments: attachmentDocs,
     deleted: false,
     alarm_options: null,
     progress: progress ?? 0,
@@ -416,13 +477,35 @@ type TaskRoleRefIds = Array<unknown>;
 // ---------------------------------------------------------------------------
 export async function commentOnTask(
   ctx: MizitoContext,
-  { workspace, taskId, taskTitle, comment }: { workspace?: string; taskId?: string; taskTitle?: string; comment: string },
+  {
+    workspace,
+    taskId,
+    taskTitle,
+    comment,
+    attachments = [],
+    files = [],
+  }: { workspace?: string; taskId?: string; taskTitle?: string; comment: string } & AttachmentOptions,
 ) {
-  if (!comment || !String(comment).trim()) throw new Error('comment is required.');
+  // A comment may be attachments-only, so allow empty text when files are given.
+  const hasText = !!(comment && String(comment).trim());
+  if (!hasText && !attachments.length && !files.length) {
+    throw new Error('comment text or at least one attachment is required.');
+  }
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
   const task = await findTask(mz, { taskId, title: taskTitle });
-  await mz.tasks.newComment({ token: task.access_token as string, comment: String(comment) });
-  return { workspace: ws.title, task_id: task._id, title: task.title, commented: true };
+  const attachmentDocs = await collectAttachments(mz, { attachments, files });
+  await mz.tasks.newComment({
+    token: task.access_token as string,
+    comment: hasText ? String(comment) : '',
+    attachments: attachmentDocs,
+  });
+  return {
+    workspace: ws.title,
+    task_id: task._id,
+    title: task.title,
+    commented: true,
+    attachments: attachmentDocs.length,
+  };
 }
 
 // ---------------------------------------------------------------------------

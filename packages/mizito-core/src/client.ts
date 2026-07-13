@@ -14,6 +14,8 @@ import { workspacesResource } from './resources/workspaces.js';
 import { lettersResource } from './resources/letters.js';
 import { dashboardResource } from './resources/dashboard.js';
 import { filesResource } from './resources/files.js';
+import { contentResource } from './resources/content.js';
+import { notesResource } from './resources/notes.js';
 
 export { CHAT_PAGE_SIZE, taskFromMessage };
 
@@ -43,6 +45,8 @@ export interface MizitoClient {
   letters: ReturnType<typeof lettersResource>;
   dashboard: ReturnType<typeof dashboardResource>;
   files: ReturnType<typeof filesResource>;
+  content: ReturnType<typeof contentResource>;
+  notes: ReturnType<typeof notesResource>;
 }
 
 export function createClient({ tokens, token, pacingMs = 200 }: ClientOptions = {}): MizitoClient {
@@ -70,6 +74,8 @@ export function createClient({ tokens, token, pacingMs = 200 }: ClientOptions = 
     letters: lettersResource(http.call),
     dashboard: dashboardResource(http.call),
     files: filesResource(http),
+    content: contentResource(http, http.call),
+    notes: notesResource(http.call),
   };
   return client;
 }
@@ -146,6 +152,10 @@ export function createMizito({ token, pacingMs = 200 }: CreateMizitoOptions = {}
     letterArchive: (thread: string, opts: { outbox?: boolean } = {}) => c.letters.archive(thread, opts),
     letterUnarchive: (thread: string, opts: { outbox?: boolean } = {}) => c.letters.unarchive(thread, opts),
     letterToggleBookmark: (thread: string) => c.letters.toggleBookmark(thread),
+
+    // --- newer modules exposed as namespaces (no legacy flat names existed) ---
+    content: c.content,
+    notes: c.notes,
   };
 }
 

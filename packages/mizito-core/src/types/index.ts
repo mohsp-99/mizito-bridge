@@ -122,6 +122,38 @@ export interface Attachment {
   content_key: string | null;
 }
 
+/**
+ * The document object returned by `content/upload`. It mirrors DocumentNode
+ * (so it drops straight into an `attachments: []` array on a task, comment, or
+ * letter) but the exact field set is only what the upload endpoint echoes back;
+ * recovered from the bundle, not yet exercised live.
+ */
+export interface UploadedDocument {
+  _id: string;
+  name?: string;
+  size?: number | null;
+  content?: string | null;
+  content_key?: string | null;
+  /** Set on some renditions (images uploaded as photos rather than files). */
+  is_image?: boolean;
+  [key: string]: unknown;
+}
+
+/** A Mizito note (the notes module — personal/workspace sticky notes). */
+export interface Note {
+  _id?: string;
+  title?: string;
+  note?: string;
+  photo?: string | null;
+  color?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  deleted?: boolean;
+  checklist?: Array<{ title: string; checked: boolean }>;
+  labels?: string[];
+  [key: string]: unknown;
+}
+
 export interface MessageMedia {
   _?: string;
   task?: Task;

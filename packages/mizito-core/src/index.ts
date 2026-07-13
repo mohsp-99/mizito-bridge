@@ -19,6 +19,13 @@
 export { createClient, createMizito, taskFromMessage, CHAT_PAGE_SIZE } from './client.js';
 export type { MizitoClient, ClientOptions, Mizito, CreateMizitoOptions } from './client.js';
 
+// Resource input types (for callers building payloads directly).
+export type { NewTaskCommentInput, SetCompletedInput } from './resources/tasks.js';
+export type { SearchMessagesInput } from './resources/chat.js';
+export type { AddProjectInput, CloneProjectInput } from './resources/projects.js';
+export type { SendLetterBody } from './resources/letters.js';
+export type { UploadInput, UploadOptions } from './resources/content.js';
+
 // Transport building blocks.
 export { createHttp } from './transport/http.js';
 export type { Http, HttpOptions, CallFn, CallOptions } from './transport/http.js';
@@ -56,8 +63,9 @@ export {
   sendMessage,
   getTaskComments,
   downloadAttachment,
+  uploadFile,
 } from './feeds/write.js';
-export type { CreateTaskInput, EditTaskInput } from './feeds/write.js';
+export type { CreateTaskInput, EditTaskInput, FileUpload, AttachmentOptions } from './feeds/write.js';
 
 // Letters / correspondence (read + write).
 export {
@@ -86,6 +94,7 @@ export {
   LOGIN_PREFIX,
   SESSION_CREATE_URL,
   CDN_BASE,
+  UPLOAD_URL,
   TOKEN_HEADER,
   ROOT,
   AUTH_DIR,
@@ -122,6 +131,8 @@ export type {
   LetterRow,
   LetterThread,
   DashboardSummaryRow,
+  UploadedDocument,
+  Note,
   Credentials,
   SessionInfo,
 } from './types/index.js';

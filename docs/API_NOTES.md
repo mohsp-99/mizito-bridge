@@ -157,13 +157,14 @@ Every one of these was exercised end-to-end against a real workspace and cleaned
 | `chat/send` | `{_:"message", dialog, out:true, message, media:null, from:uid, date:Date.now(), reply_to:null, mention:[], seen_count:1, randomId}` | `true` — **no message id echoed back**. To delete a just-sent message, find its `mid` via `chat/getHistory` then `chat/removeSentMessage`. |
 | `chat/removeSentMessage` | `{dialog, mid}` | `true`. Deletes a message you sent. |
 
-The full recovered API surface (≈200 `invokeApi` literals across `tasks/chat/projects/
-workspace/inbox/labels/notes/meeting/…`) is much larger than what is wired up. The task
-and chat write surface above is implemented; the letters (inbox) + conversations surface
-is implemented too (see the two sections below). Other notable unimplemented writes seen
-in the bundle: `tasks/snooze`, `tasks/setChecklistCheckedValue`, `tasks/toggleBookmark`,
-`tasks/removeFromBoard`, `tasks/setKanbanWeight`, `projects/add`, `projects/addKanbanBoard`,
-`labels/add`, `chat/updateSentMessage`, `inbox/registerInLetter`, `inbox/registerOutLetter`.
+The full API surface is **230 `invokeApi` literals across 14 modules** (extracted from
+the bundle — see the inventory appendix at the end of this file). Roughly half is now
+wrapped in the core; the rest is either deliberately out of scope (meetings, monitor
+charts, CRM, support, session lifecycle) or needs a live-capture pass for its payload
+shape (the 16 gantt endpoints). The endpoints filled in the 2026-07 round — task/chat/
+project/label/dashboard/inbox gaps, workspace member admin, the **notes** module, and
+**uploads** (`content/upload`) — were wrapped from their exact bundle call-site payloads
+but, apart from the previously-verified task/chat writes, are **not yet exercised live**.
 
 ## Letters / correspondence (the "inbox" module)
 
@@ -249,7 +250,26 @@ Download (**verified**, GET): `https://app.mizito.ir/cdn/<content-token>`.
   downloads a workspace's attachments with the scoped `x-token`.
 - The content tokens **expire** (they embed a timestamp), so run `npm run files` soon
   after a crawl; re-crawl to refresh tokens if downloads start returning the stub.
-- Upload (not used) is `POST /api/content/upload`.
+
+### Uploads (the write-half of attachments)
+
+**`POST /api/content/upload`** — multipart/form-data, `x-token` header, **not** a dotted
+`invokeApi` call. From the bundle (`Config.App.api_url + "/api/content/upload"`, sent via
+`$.ajax` with `processData:false, contentType:false`) the FormData fields are:
+
+| Field | Value |
+| --- | --- |
+| `upload` | the file bytes (required); the part's filename is the sent name |
+| `maxWidthHeight` | optional — cap the longest image side (server-side resize) |
+| `sendAsFile` | `"true"` to keep a file/document, `"false"` to treat an image as an inline photo |
+
+The response is the **document object** (mirrors the `document` nodes on attachments:
+`_id, name, size, content, content_key`), which is then pushed into a task/comment/letter
+`attachments: []` array or a chat photo/document message's media. Wrapped in
+`resources/content.ts` (`upload`, `getDownloadLink`, `getCroppedPhoto`); the feed layer
+(`feeds/write.ts`) adds `uploadFile()` and an `attachments`/`files` option on
+`createTask` / `commentOnTask` / `sendLetter` that uploads and threads the document in one
+call. Recovered from the bundle; **not yet exercised live.**
 
 ## No reactions
 
@@ -271,3 +291,34 @@ app keeps a **socket.io** real-time connection (bundle uses the socket.io client
    crawl to detect and log changes. Not instant, but simple and robust.
 
 Neither is built yet — this section records feasibility for a future `watch` step.
+
+## Appendix — full endpoint inventory (bundle `1.0.4-589`)
+
+Every `invokeApi("group.action", …)` literal in the SPA bundle, by module: **230
+endpoints across 14 modules**. Extract them yourself with
+`grep -oE 'invokeApi\("[a-z_]+\.[a-zA-Z_.]+"' a_.js` (fetch the bundle from
+`office.mizito.ir/a_.js?v=<version>`). The core currently wraps **123** of them
+(`resources/*.ts` — verify with `grep -rhoE "'[a-z]+/[a-zA-Z/]+'" packages/mizito-core/src/resources`).
+
+| Module | Total | Wrapped | Notes on what's left |
+| --- | --- | --- | --- |
+| `tasks` | 28 | 22 | left: `get`, `ganttGetTaskInfo`, `print` (HTML), `createShareLink` done; `setKanbanWeightSort`, `removeTask*` variants covered |
+| `chat` | 37 | 27 | left: `fixDialogs`, `convert*`, `removeMentionMessage`, `removeSentMessageAdmin`, `removeTaskSnoozeMessage`, `getDialogUnDoneTasksCount` (niche/admin) |
+| `projects` | 40 | 16 | left: **all 16 gantt** endpoints (need live capture), `import*`, `getListAdmin*`, `setAdvancedFeatures`, `getProjectFiles` |
+| `inbox` | 22 | 18 | left: `wait`, plus the two `*.sender` archive variants are folded into `archive`/`unarchive` |
+| `labels` | 7 | 5 | left: `len`, `sendUsage` (telemetry) |
+| `dashboard` | 11 | 7 | left: `whatsNew`/`setWhatsNewSeen`/`demoGuide`/`notifySeen` (UI chrome) |
+| `workspace` | 22 | 9 | left: role/permission/plan admin (`changeRole`, `updateUserPermission`, `getPlans` done), `add`/`delete`/`changeOwner` (destructive account ops) |
+| `notes` | 9 | 9 | **complete** |
+| `content` | 3 | 3 | **complete** (upload + 2 download-link helpers) |
+| `session` | 10 | 0 | out of scope: `register`, `forgot*`, `logout`, `deleteAccount*` (auth lifecycle) |
+| `meeting` | 7 | 0 | out of scope: video/audio meetings — needs live capture |
+| `monitor` | 15 | 0 | out of scope: analytics/attendance charts — needs live capture |
+| `support` | 14 | 0 | out of scope: in-app support tickets |
+| `crm` | ~5 | 0 | out of scope: customers module |
+
+"Out of scope" = intentionally not wrapped this round; "needs live capture" = the payload
+shape isn't inferable from the bundle call site alone (drive the UI with
+`npm run discover` to record it). Everything wrapped in the 2026-07 round that wasn't
+already verified is typed from the exact bundle call-site payload but **not yet exercised
+live** — treat first real calls as unverified.

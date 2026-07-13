@@ -27,6 +27,16 @@ export function workspacesResource(call: CallFn) {
     name: () => call('workspace/name', {}),
     planInfo: () => call('workspace/planInfo', {}),
     getUsers: () => call<{ users?: Member[] }>('workspace/getUsers', {}),
+
+    // --- admin (recovered from the bundle, NOT yet exercised live) ---
+    // Permission matrix / available plans for the active workspace.
+    getPermissions: () => call('workspace/getPermissions', {}),
+    getPlans: () => call('workspace/getPlans', {}),
+    // Invite a member by name + phone/email. `is_guest` limits their access.
+    inviteMember: (name: string, email_phone: string, is_guest = false) =>
+      call<{ success?: boolean; message?: string }>('workspace/inviteMember', { name, email_phone, is_guest }),
+    // Rename the active workspace.
+    updateTitle: (title: string) => call('workspace/updateTitle', { title }),
   };
 }
 

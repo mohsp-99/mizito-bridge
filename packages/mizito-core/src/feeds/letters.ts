@@ -15,8 +15,9 @@
 import { resolveWorkspace } from './index.js';
 import type { MizitoContext } from './index.js';
 import { loadMembers, findByName, fullName, attachmentOf } from './write.js';
+import type { AttachmentOptions } from './write.js';
 import { stripHtml } from '../util.js';
-import type { Attachment, Member } from '../types/index.js';
+import type { Attachment, Member, UploadedDocument } from '../types/index.js';
 
 const MAILBOXES = new Set(['inbox', 'outbox', 'archive']);
 
@@ -146,7 +147,15 @@ export async function sendLetter(
     subject,
     content,
     labels = [],
-  }: { workspace?: string; to: string | string[]; subject: string; content: string; labels?: unknown[] },
+    attachments = [],
+    files = [],
+  }: {
+    workspace?: string;
+    to: string | string[];
+    subject: string;
+    content: string;
+    labels?: unknown[];
+  } & AttachmentOptions,
 ) {
   if (!subject || !String(subject).trim()) throw new Error('subject is required.');
   if (!content || !String(content).trim()) throw new Error('content is required.');
@@ -155,11 +164,22 @@ export async function sendLetter(
   const toIds = resolveRecipients(members, to, ws.title);
   if (!toIds.length) throw new Error('At least one recipient (to) is required.');
 
+  const attachmentDocs: UploadedDocument[] = [];
+  for (const f of files) {
+    attachmentDocs.push(
+      await mz.content.upload(f.data, {
+        filename: f.filename,
+        maxWidthHeight: f.maxWidthHeight,
+        sendAsFile: f.sendAsFile,
+      }),
+    );
+  }
+
   const body = {
     to: toIds,
     subject: String(subject),
     content: String(content),
-    attachments: [],
+    attachments: [...attachments, ...attachmentDocs],
     tasks_insert_to_chat_groups: [],
     labels: labels ?? [],
   };

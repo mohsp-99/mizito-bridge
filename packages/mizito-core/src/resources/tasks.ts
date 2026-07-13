@@ -65,6 +65,47 @@ export function tasksResource(call: CallFn) {
         ...(progress != null ? { progress } : {}),
         undone_user_id,
       }),
+
+    // --- more writes/reads (recovered from the bundle; payloads verbatim,
+    // NOT yet exercised live from this library) ---
+    // A task's full change history. Keyed by access_token + id.
+    history: (accessToken: string, taskId: string) =>
+      call('tasks/history', { token: accessToken, tid: taskId }),
+    // Snooze a task's alarm to `alarm_at` (ISO). `project` is required.
+    snooze: (accessToken: string, project: string | null, alarm_at: string | null) =>
+      call<Task>('tasks/snooze', { token: accessToken, project, alarm_at }),
+    // Move a task's deadline. `project` is required; `deadline` null clears it.
+    updateDeadline: (accessToken: string, project: string | null, deadline: string | null) =>
+      call<Task>('tasks/updateDeadline', { token: accessToken, project, deadline }),
+    // Bookmark / un-bookmark a task.
+    toggleBookmark: (accessToken: string, bookmarked: boolean) =>
+      call('tasks/toggleBookmark', { token: accessToken, bookmarked }),
+    // Check/uncheck a checklist item (by the item's _id).
+    setChecklistCheckedValue: (accessToken: string, checklistId: string, checked: boolean) =>
+      call<Task>('tasks/setChecklistCheckedValue', { token: accessToken, checklistId, checked }),
+    // Set a task's kanban weight (ordering) within a board.
+    setKanbanWeight: (input: { token: string; projectId: string; kanbanBoardId: string; kanbanWeight: number }) =>
+      call('tasks/setKanbanWeight', input),
+    // Remove a task from its kanban board (keeps the task).
+    removeFromBoard: (accessToken: string, projectId: string) =>
+      call('tasks/removeFromBoard', { token: accessToken, project_id: projectId }),
+    // Create a public share link for a task; returns the URL.
+    createShareLink: (accessToken: string) => call<string>('tasks/createShareLink', { token: accessToken }),
+    // Lightweight token check → { seen_count, bookmarked }.
+    checkToken: (taskId: string, accessToken: string) =>
+      call<{ seen_count?: number; bookmarked?: boolean }>('tasks/checkToken', { tid: taskId, token: accessToken }),
+    // Per-recipient seen details for a task.
+    getSeenDetails: (accessToken: string) => call('tasks/getSeenDetails', { token: accessToken }),
+    // Undo a task deletion.
+    removeTaskUndo: (accessToken: string) => call('tasks/removeTaskUndo', { token: accessToken }),
+    // Stop tracking (following) a task.
+    removeFromTracking: (accessToken: string) => call('tasks/removeFromTracking', { token: accessToken }),
+
+    // --- comment edits (keyed by the task access_token + the comment id) ---
+    editComment: (accessToken: string, commentId: string, newComment: string) =>
+      call('tasks/editComment', { token: accessToken, commentId, newComment }),
+    deleteComment: (accessToken: string, commentId: string) =>
+      call('tasks/deleteComment', { token: accessToken, commentId }),
   };
 }
 

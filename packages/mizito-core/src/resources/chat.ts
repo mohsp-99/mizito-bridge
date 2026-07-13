@@ -45,6 +45,44 @@ export function chatResource(call: CallFn) {
     createDialog: (user: string) => call<Dialog>('chat/createDialog', { user }),
     // Mark a dialog seen up to `seen_count` messages.
     seen: (dialog: string, seen_count: number) => call('chat/seen', { dialog, seen_count }),
+    // Fetch specific messages by id.
+    getMessages: (mids: Array<string | number>, dialog: string) =>
+      call<ChatMessage[]>('chat/getMessages', { mids, dialog }),
+    // The message at (or nearest) a date / a message's index in the dialog.
+    getMessageByDate: (dialog: string, date: number | string) =>
+      call('chat/getMessageByDate', { dialog, date }),
+    getMessageIndex: (dialog: string, mid: string | number) =>
+      call('chat/getMessageIndex', { dialog, mid }),
+    // Edit a message you sent.
+    updateSentMessage: (dialog: string, mid: string | number, newMessage: string) =>
+      call('chat/updateSentMessage', { dialog, mid, newMessage }),
+    // Per-message status/seen details.
+    getStatusDetails: (dialog: string, mid: string | number) =>
+      call('chat/getStatusDetails', { dialog, mid }),
+    // Bookmark / un-bookmark a message.
+    toggleBookmark: (dialog: string, mid: string | number, bookmarked: boolean) =>
+      call('chat/toggleBookmark', { dialog, mid, bookmarked }),
+    // Typing indicator (best-effort; the SPA fires this while composing).
+    setTyping: (dialog: string) => call('chat/setTyping', { dialog }),
+    // Per-dialog notification settings (mute).
+    saveSettings: (dialog: string, mute: boolean) => call('chat/saveSettings', { dialog, mute }),
+
+    // --- dialog pinning + pinned messages ---
+    pinDialog: (dialog: string) => call<{ success?: boolean; pin_dialogs?: unknown }>('chat/pinDialog', { dialog }),
+    unpinDialog: (dialog: string) => call<{ pin_dialogs?: unknown }>('chat/unpinDialog', { dialog }),
+    // `message` is the message id (mid) to pin/unpin within the dialog.
+    addPinMessage: (dialog: string, message: string | number) => call('chat/addPinMessage', { dialog, message }),
+    removePinMessage: (dialog: string, message: string | number) => call('chat/removePinMessage', { dialog, message }),
+
+    // --- group administration (project/team groups) ---
+    updateTitle: (dialog: string, title: string) => call('chat/updateTitle', { dialog, title }),
+    // `photo` is a content _id (upload it first via content.upload).
+    updatePhoto: (dialog: string, photo: string) => call('chat/updatePhoto', { dialog, photo }),
+    removePhoto: (dialog: string) => call('chat/removePhoto', { dialog }),
+    setAdmin: (dialog: string, user: string, isAdmin: boolean) => call('chat/setAdmin', { dialog, user, isAdmin }),
+    inviteUser: (dialog: string, user: string) => call('chat/inviteUser', { dialog, user }),
+    deleteUser: (dialog: string, user: string) => call('chat/deleteUser', { dialog, user }),
+    deleteDialog: (dialog: string) => call('chat/deleteDialog', { dialog }),
 
     // Page through a dialog's entire message history. Returns all messages,
     // oldest-to-newest order as the API provides them.

@@ -29,6 +29,11 @@ export const SESSION_CREATE_URL = `${API_BASE}${LOGIN_PREFIX}/session/create`;
 // (JWT) and authenticated with the same x-token header as the API.
 export const CDN_BASE = `${API_BASE}/cdn/`;
 
+// File uploads go here as multipart/form-data (field `upload`), authenticated
+// with the same x-token header. From the bundle: `Config.App.api_url +
+// "/api/content/upload"`. See resources/content.ts.
+export const UPLOAD_URL = `${API_BASE}${API_PREFIX}/content/upload`;
+
 // Header the SPA uses to authenticate every data call.
 export const TOKEN_HEADER = 'x-token';
 
