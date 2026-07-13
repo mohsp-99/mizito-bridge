@@ -38,5 +38,10 @@
     "api": "node packages/mizito-crawler/src/api.mjs",
     "extract": "node packages/mizito-crawler/src/extract-api-surface.mjs",
     "test:write": "node packages/mizito-crawler/src/write-probe.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3"
   }
 }

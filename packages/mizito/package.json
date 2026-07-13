@@ -2,7 +2,7 @@
   "name": "@mohsp-99/mizito",
   "version": "0.1.0",
   "type": "module",
-  "description": "Client library for the Mizito (office.mizito.ir) API — tasks, chat, letters, projects, workspaces. Reverse-engineered, no browser, no server: log in with a saved session or credentials and call the API directly.",
+  "description": "Typed client library for the Mizito (office.mizito.ir) API — tasks, chat, letters, projects, workspaces. Reverse-engineered, no browser, no server: log in with a saved session or credentials and call the API directly.",
   "license": "MIT",
   "author": "mohsp-99",
   "homepage": "https://github.com/mohsp-99/mizito-bridge#readme",
@@ -19,21 +19,31 @@
     "tasks",
     "project-management",
     "api-client",
+    "typescript",
     "automation"
   ],
   "engines": {
     "node": ">=20"
   },
-  "main": "index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./index.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
   },
   "files": [
-    "index.js",
-    "*.js",
+    "dist",
     "README.md",
     "LICENSE"
   ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/"
+  },
   "publishConfig": {
     "access": "public"
   },

@@ -1,6 +1,6 @@
 // Workspace-aware CONVERSATIONS layer (Mizito chat).
 //
-// core/feed.js already answers "which conversations have unread messages?"
+// feeds/index.ts already answers "which conversations have unread messages?"
 // across all workspaces. This module goes deeper within a workspace: list every
 // conversation, and READ a conversation's message history — normalized so each
 // message reports its author, direction, time, and kind (text / task / photo /
@@ -10,30 +10,35 @@
 // A "dialog" is any conversation: a direct message, a team group, or a project
 // group. Project-group messages are mostly task cards (a task is a message whose
 // media is `messageMediaTask`; see docs/MIZITO_INTERNALS.md).
-import { resolveWorkspace } from './feed.js';
+import { resolveWorkspace } from './index.js';
+import type { MizitoContext } from './index.js';
+import type { MizitoClient } from '../client.js';
 import { loadProjects, loadMembers, findByName, fullName, attachmentOf } from './write.js';
-import { taskFromMessage, CHAT_PAGE_SIZE } from './mizito.js';
+import { taskFromMessage, CHAT_PAGE_SIZE } from '../resources/chat.js';
+import type { ChatMessage, Dialog, Member, MessageMedia } from '../types/index.js';
+import type { WorkspaceRef } from './index.js';
 
-const nameOf = (map, id) => (id ? map.get(id) || id : null);
+const nameOf = (map: Map<string, string>, id: string | null | undefined): string | null =>
+  id ? map.get(id) || id : null;
 
-function memberMap(members) {
+function memberMap(members: Member[]): Map<string, string> {
   return new Map(members.map((m) => [m._id, fullName(m) || m.username || m._id]));
 }
 
-function dialogTitle(d, names) {
+function dialogTitle(d: Dialog, names: Map<string, string>): string {
   if (d.title) return d.title;
   if (d.is_group || d.is_project_group) return '(group)';
   return nameOf(names, d.peer_user) || '(direct message)';
 }
 
-function dialogKind(d) {
+function dialogKind(d: Dialog): 'project' | 'group' | 'direct' {
   if (d.is_project_group) return 'project';
   if (d.is_group) return 'group';
   return 'direct';
 }
 
 // Pick the CDN token for a photo message (prefer the largest rendition).
-function photoOf(photo) {
+function photoOf(photo: MessageMedia['photo'] | null | undefined) {
   if (!photo) return null;
   const r = photo.photo_large || photo.photo_medium || photo.photo_small || {};
   return {
@@ -45,7 +50,7 @@ function photoOf(photo) {
 }
 
 // Normalize a chat message into a compact, readable shape.
-function normalizeMessage(m, names, uid) {
+function normalizeMessage(m: ChatMessage, names: Map<string, string>, uid: string) {
   const kind = m?.media?._ || m?._ || (typeof m?.message === 'string' ? 'message' : 'unknown');
   const base = {
     mid: m._id || m.mid || null,
@@ -59,11 +64,16 @@ function normalizeMessage(m, names, uid) {
       return { ...base, type: 'text', text: m.message || '' };
     case 'messageMediaTask':
     case 'messageMediaMentionInTask': {
-      const t = taskFromMessage(m) || m.media?.task || {};
+      const t = taskFromMessage(m) || m.media?.task || ({} as Record<string, unknown>);
       return {
         ...base,
         type: kind === 'messageMediaMentionInTask' ? 'task_mention' : 'task',
-        task: { id: t._id, title: t.title, progress: t.progress ?? 0, completed: !!t.completed },
+        task: {
+          id: (t as { _id?: string })._id,
+          title: (t as { title?: string }).title,
+          progress: (t as { progress?: number }).progress ?? 0,
+          completed: !!(t as { completed?: boolean }).completed,
+        },
       };
     }
     case 'messageMediaPhoto':
@@ -80,10 +90,13 @@ function normalizeMessage(m, names, uid) {
 // ---------------------------------------------------------------------------
 // List conversations in a workspace (optionally only those with unread).
 // ---------------------------------------------------------------------------
-export async function listConversations(ctx, { workspace, unreadOnly = false, limit = 50 } = {}) {
+export async function listConversations(
+  ctx: MizitoContext,
+  { workspace, unreadOnly = false, limit = 50 }: { workspace?: string; unreadOnly?: boolean; limit?: number } = {},
+) {
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
   const [res, members] = await Promise.all([
-    mz.dialogs(),
+    mz.chat.getDialogs(),
     loadMembers(mz).catch(() => []),
   ]);
   const names = memberMap(members);
@@ -106,7 +119,12 @@ export async function listConversations(ctx, { workspace, unreadOnly = false, li
 
 // Resolve which dialog to read from: an explicit dialog id, a project (its group
 // chat), or a member (an existing direct-message dialog — not created here).
-async function resolveDialog(ctx, mz, ws, { dialog, project, user }) {
+async function resolveDialog(
+  ctx: MizitoContext,
+  mz: MizitoClient,
+  ws: WorkspaceRef,
+  { dialog, project, user }: { dialog?: string; project?: string; user?: string },
+): Promise<{ dialog: string; where: string }> {
   if (dialog) return { dialog, where: dialog };
   if (project) {
     const projects = (await loadProjects(mz)).filter((p) => !p.deleted);
@@ -116,13 +134,15 @@ async function resolveDialog(ctx, mz, ws, { dialog, project, user }) {
     return { dialog: proj.dialog, where: proj.title };
   }
   if (user) {
-    const [members, res] = await Promise.all([loadMembers(mz), mz.dialogs()]);
+    const [members, res] = await Promise.all([loadMembers(mz), mz.chat.getDialogs()]);
     const u =
       findByName(members, user, fullName) ||
       findByName(members, user, (m) => m.first_name) ||
       findByName(members, user, (m) => m.username);
     if (!u) throw new Error(`No member matches "${user}" in "${ws.title}".`);
-    const dm = (res?.dialogs ?? []).find((d) => !d.is_group && !d.is_project_group && d.peer_user === u._id);
+    const dm = (res?.dialogs ?? []).find(
+      (d) => !d.is_group && !d.is_project_group && d.peer_user === u._id,
+    );
     if (!dm) {
       throw new Error(
         `No existing direct message with "${fullName(u) || user}". Send them a message first (mizito_send_message with user).`,
@@ -136,15 +156,24 @@ async function resolveDialog(ctx, mz, ws, { dialog, project, user }) {
 // ---------------------------------------------------------------------------
 // Read a conversation's recent messages, normalized and in chronological order.
 // ---------------------------------------------------------------------------
-export async function readConversation(ctx, { workspace, dialog, project, user, limit = 30 } = {}) {
+export async function readConversation(
+  ctx: MizitoContext,
+  {
+    workspace,
+    dialog,
+    project,
+    user,
+    limit = 30,
+  }: { workspace?: string; dialog?: string; project?: string; user?: string; limit?: number } = {},
+) {
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
   const { dialog: dlg, where } = await resolveDialog(ctx, mz, ws, { dialog, project, user });
 
   const cap = Math.max(1, Math.min(Number(limit) || 30, 200));
-  const collected = [];
+  const collected: ChatMessage[] = [];
   let offset = 0;
   for (;;) {
-    const page = await mz.history(dlg, offset).catch(() => []);
+    const page = await mz.chat.getHistory(dlg, offset).catch(() => [] as ChatMessage[]);
     if (!Array.isArray(page) || page.length === 0) break;
     collected.push(...page);
     offset += page.length;
@@ -169,9 +198,12 @@ export async function readConversation(ctx, { workspace, dialog, project, user, 
 // Opens (or reuses) the direct-message dialog with the member, then sends the
 // text. chat/createDialog returns the existing DM if one already exists, so this
 // is safe to call repeatedly. Uses the same outgoing-message shape as
-// core/write.js sendMessage.
+// feeds/write.ts sendMessage.
 // ---------------------------------------------------------------------------
-export async function messageUser(ctx, { workspace, user, text } = {}) {
+export async function messageUser(
+  ctx: MizitoContext,
+  { workspace, user, text }: { workspace?: string; user: string; text: string },
+) {
   if (!user || !String(user).trim()) throw new Error('user is required.');
   if (!text || !String(text).trim()) throw new Error('text is required.');
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
@@ -182,7 +214,9 @@ export async function messageUser(ctx, { workspace, user, text } = {}) {
     findByName(members, user, (m) => m.username);
   if (!u) throw new Error(`No member matches "${user}" in "${ws.title}".`);
 
-  const created = await mz.createDialog(u._id);
+  const created = (await mz.chat.createDialog(u._id)) as
+    | { _id?: string; dialog?: string; data?: { _id?: string } }
+    | null;
   const dlg = created?._id || created?.dialog || created?.data?._id;
   if (!dlg) throw new Error('Could not open a direct message with that member.');
 
@@ -200,6 +234,6 @@ export async function messageUser(ctx, { workspace, user, text } = {}) {
     randomId: Math.floor(Math.random() * 1e9),
     pending: true,
   };
-  await mz.sendMessage(message);
+  await mz.chat.send(message);
   return { workspace: ws.title, dialog: dlg, sent_to: fullName(u) || user, text: String(text), sent: true };
 }

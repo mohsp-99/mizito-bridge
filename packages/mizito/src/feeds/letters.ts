@@ -4,34 +4,37 @@
 // archive), and carries recipients (with per-person read receipts), an HTML
 // body, attachments, and labels.
 //
-// This mirrors core/write.js for tasks: reads are normalized and safe; the
+// This mirrors feeds/write.ts for tasks: reads are normalized and safe; the
 // send/reply/seen/archive helpers MUTATE your account and run only when a tool
 // calls them. Every op targets ONE workspace (the active one unless a name/id is
 // given) and resolves member names to ids, failing loudly rather than guessing.
 //
-// The letter READ endpoints are verified live (see apps/crawler/letters-probe or
-// docs/API_NOTES.md); the letter WRITE endpoints are recovered from the SPA
-// bundle but not yet exercised end-to-end.
-import { resolveWorkspace } from './feed.js';
+// The letter READ endpoints are verified live; the letter WRITE endpoints are
+// recovered from the SPA bundle but not yet exercised end-to-end (see
+// docs/API_NOTES.md).
+import { resolveWorkspace } from './index.js';
+import type { MizitoContext } from './index.js';
 import { loadMembers, findByName, fullName, attachmentOf } from './write.js';
-import { stripHtml } from './util.js';
+import { stripHtml } from '../util.js';
+import type { Attachment, Member } from '../types/index.js';
 
 const MAILBOXES = new Set(['inbox', 'outbox', 'archive']);
 
-const nameOf = (map, id) => (id ? map.get(id) || id : null);
+const nameOf = (map: Map<string, string>, id: string | null | undefined): string | null =>
+  id ? map.get(id) || id : null;
 
-function memberMap(members) {
+function memberMap(members: Member[]): Map<string, string> {
   return new Map(members.map((m) => [m._id, fullName(m) || m.username || m._id]));
 }
 
 // One-line preview of an HTML letter body.
-function snippet(html, n = 240) {
+function snippet(html: unknown, n = 240): string {
   const s = stripHtml(html).replace(/\s+/g, ' ').trim();
   return s.length > n ? s.slice(0, n) + '…' : s;
 }
 
 // Resolve member name/id refs to ids (recipients for a new letter).
-function resolveRecipients(members, refs, wsTitle) {
+function resolveRecipients(members: Member[], refs: string | string[] | null | undefined, wsTitle: string): string[] {
   const list = refs == null ? [] : Array.isArray(refs) ? refs : [refs];
   return list.map((ref) => {
     const u =
@@ -46,11 +49,14 @@ function resolveRecipients(members, refs, wsTitle) {
 // ---------------------------------------------------------------------------
 // List letters in a mailbox (inbox / outbox / archive), normalized.
 // ---------------------------------------------------------------------------
-export async function listLetters(ctx, { workspace, box = 'inbox', limit = 30 } = {}) {
+export async function listLetters(
+  ctx: MizitoContext,
+  { workspace, box = 'inbox', limit = 30 }: { workspace?: string; box?: string; limit?: number } = {},
+) {
   const mode = MAILBOXES.has(String(box)) ? String(box) : 'inbox';
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
   const [rows, members] = await Promise.all([
-    mz.letters(mode, 0).catch(() => []),
+    mz.letters.getInbox(mode, 0).catch(() => []),
     loadMembers(mz).catch(() => []),
   ]);
   const names = memberMap(members);
@@ -77,11 +83,14 @@ export async function listLetters(ctx, { workspace, box = 'inbox', limit = 30 } 
 // ---------------------------------------------------------------------------
 // Read one letter thread in full (body, recipients + read receipts, files).
 // ---------------------------------------------------------------------------
-export async function readLetter(ctx, { workspace, thread } = {}) {
+export async function readLetter(
+  ctx: MizitoContext,
+  { workspace, thread }: { workspace?: string; thread: string },
+) {
   if (!thread || !String(thread).trim()) throw new Error('thread is required (from mizito_letters).');
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
   const [letter, members] = await Promise.all([
-    mz.letterThread(thread),
+    mz.letters.getHistory(thread),
     loadMembers(mz).catch(() => []),
   ]);
   if (!letter || typeof letter !== 'object') {
@@ -95,13 +104,13 @@ export async function readLetter(ctx, { workspace, thread } = {}) {
     seen_date: t.seen_date || null,
     archived: !!t.archived,
   }));
-  const attachments = (letter.attachments || []).map(attachmentOf).filter(Boolean);
+  const attachments = (letter.attachments || []).map(attachmentOf).filter((x): x is Attachment => x != null);
   // Replies within the thread (a multi-message correspondence).
   const followups = (letter.messages || []).map((m) => ({
     from: nameOf(names, m.from),
     date: m.send_date || m.date || null,
     text: stripHtml(m.content || m.message || ''),
-    attachments: (m.attachments || []).map(attachmentOf).filter(Boolean),
+    attachments: (m.attachments || []).map(attachmentOf).filter((x): x is Attachment => x != null),
   }));
 
   return {
@@ -129,7 +138,16 @@ export async function readLetter(ctx, { workspace, thread } = {}) {
 // `to` is required (the API rejects an empty recipient list). `content` is HTML
 // in the app; a plain string is fine (it renders as text).
 // ---------------------------------------------------------------------------
-export async function sendLetter(ctx, { workspace, to, subject, content, labels = [] } = {}) {
+export async function sendLetter(
+  ctx: MizitoContext,
+  {
+    workspace,
+    to,
+    subject,
+    content,
+    labels = [],
+  }: { workspace?: string; to: string | string[]; subject: string; content: string; labels?: unknown[] },
+) {
   if (!subject || !String(subject).trim()) throw new Error('subject is required.');
   if (!content || !String(content).trim()) throw new Error('content is required.');
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
@@ -145,7 +163,7 @@ export async function sendLetter(ctx, { workspace, to, subject, content, labels 
     tasks_insert_to_chat_groups: [],
     labels: labels ?? [],
   };
-  const res = await mz.sendLetter(body);
+  const res = (await mz.letters.send(body)) as { thread?: string; _id?: string } | null;
   return {
     workspace: ws.title,
     sent: true,
@@ -162,17 +180,20 @@ export async function sendLetter(ctx, { workspace, to, subject, content, labels 
 // participants (sender + other recipients, minus me). Reads the thread first to
 // derive the subject and recipient set so the reply lands with the right people.
 // ---------------------------------------------------------------------------
-export async function replyLetter(ctx, { workspace, thread, content } = {}) {
+export async function replyLetter(
+  ctx: MizitoContext,
+  { workspace, thread, content }: { workspace?: string; thread: string; content: string },
+) {
   if (!thread || !String(thread).trim()) throw new Error('thread is required.');
   if (!content || !String(content).trim()) throw new Error('content is required.');
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
-  const letter = await mz.letterThread(thread);
+  const letter = await mz.letters.getHistory(thread);
   if (!letter || typeof letter !== 'object') {
     throw new Error(`No letter thread "${thread}" in "${ws.title}".`);
   }
 
   const me = ctx.boot.uid;
-  const participants = new Set();
+  const participants = new Set<string>();
   if (letter.from) participants.add(letter.from);
   for (const t of letter.to || []) if (t.user) participants.add(t.user);
   participants.delete(me);
@@ -187,17 +208,20 @@ export async function replyLetter(ctx, { workspace, thread, content } = {}) {
     tasks_insert_to_chat_groups: [],
     labels: [],
   };
-  await mz.sendLetter(body);
+  await mz.letters.send(body);
   return { workspace: ws.title, thread, recipients: toIds.length, replied: true };
 }
 
 // ---------------------------------------------------------------------------
 // Mark a letter thread read. WRITE (mutating).
 // ---------------------------------------------------------------------------
-export async function markLetterRead(ctx, { workspace, thread } = {}) {
+export async function markLetterRead(
+  ctx: MizitoContext,
+  { workspace, thread }: { workspace?: string; thread: string },
+) {
   if (!thread || !String(thread).trim()) throw new Error('thread is required.');
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
-  await mz.letterSeen(thread);
+  await mz.letters.seen(thread);
   return { workspace: ws.title, thread, marked_read: true };
 }
 
@@ -207,11 +231,19 @@ export async function markLetterRead(ctx, { workspace, thread } = {}) {
 // Sent letters (box:'outbox') use the `.sender` archive variant. Pass
 // unarchive:true to move it back.
 // ---------------------------------------------------------------------------
-export async function archiveLetter(ctx, { workspace, thread, box = 'inbox', unarchive = false } = {}) {
+export async function archiveLetter(
+  ctx: MizitoContext,
+  {
+    workspace,
+    thread,
+    box = 'inbox',
+    unarchive = false,
+  }: { workspace?: string; thread: string; box?: string; unarchive?: boolean },
+) {
   if (!thread || !String(thread).trim()) throw new Error('thread is required.');
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
   const outbox = String(box) === 'outbox';
-  if (unarchive) await mz.letterUnarchive(thread, { outbox });
-  else await mz.letterArchive(thread, { outbox });
+  if (unarchive) await mz.letters.unarchive(thread, { outbox });
+  else await mz.letters.archive(thread, { outbox });
   return { workspace: ws.title, thread, archived: !unarchive };
 }

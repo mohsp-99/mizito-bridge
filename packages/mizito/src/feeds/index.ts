@@ -1,4 +1,4 @@
-// Workspace-aware "personal feed" layer over the raw Mizito client.
+// Workspace-aware "personal feed" layer over the Mizito client.
 //
 // Mizito scopes most data calls to the session's *active* workspace, but a user
 // belongs to several workspaces and their tasks/messages are spread across them.
@@ -9,87 +9,94 @@
 // This module turns that into a few high-level, normalized reads that any tool
 // (the MCP server today, more later) can use: identity, overview, my tasks, and
 // unread messages — across all workspaces or one.
-import { createMizito } from './mizito.js';
-import { loadToken } from './auth.js';
-import { reauthenticate, hasCredentials } from './login.js';
+import { createClient } from '../client.js';
+import type { MizitoClient } from '../client.js';
+import { staticToken, diskSession, hasCredentials } from '../auth/providers.js';
+import type { TokenProvider } from '../auth/types.js';
+import { MizitoApiError } from '../transport/errors.js';
+import type { Bootstrap, Task, TaskRoleRef, Workspace } from '../types/index.js';
 
-// The `workspace/switch` response shape varies (sometimes `{token}`, sometimes
-// the standard `{data:{token}}` envelope). Pull the token out of either.
-function tokenFromSwitch(sw) {
-  if (!sw) return null;
-  if (typeof sw === 'string') return sw;
-  return sw.data?.token || sw.token || null;
+export interface MizitoContext {
+  tokens: TokenProvider;
+  /** The base session token (scoped to the account's active workspace). */
+  token: string;
+  root: MizitoClient;
+  boot: Bootstrap;
 }
 
-// Is this error an auth failure (expired/invalid token) rather than a transient
-// server/network problem? The bootstrap call (workspace/userId) is parameterless,
-// so a rejected envelope from it almost always means the token is bad. We
-// exclude 429/5xx so we don't burn credentials on a passing storm.
-function isAuthError(err) {
-  if (!err) return false;
-  if (err.httpStatus === 401 || err.httpStatus === 403) return true;
-  if (err.httpStatus === 429 || err.httpStatus >= 500) return false;
-  return err.name === 'MizitoApiError';
+export interface WorkspaceRef {
+  id: string;
+  title: string;
+  active: boolean;
 }
 
-// Try a bootstrap with a given token; returns the context or throws.
-async function bootstrapWith(token) {
-  const root = createMizito({ token });
-  const boot = await root.bootstrap();
-  return { token, root, boot };
+// Is this error an auth failure the transport could NOT heal (it already calls
+// onAuthExpired on 401/403), or an envelope rejection that smells like one?
+// The bootstrap call (workspace/userId) is parameterless, so a rejected
+// envelope from it almost always means the token is bad. We exclude
+// rate-limit/server errors so we don't burn credentials on a passing storm.
+function isAuthLikeError(err: unknown): boolean {
+  if (!(err instanceof MizitoApiError)) return false;
+  return err.code === 'auth' || err.code === 'api';
 }
 
-// Bootstrap: identity + the account's workspaces. Prefers the saved session
-// token; if it's missing or expired AND credentials are configured (env
-// MIZITO_USERNAME/MIZITO_PASSWORD or auth/credentials.json), it logs in headless
-// and retries once — so a stale session heals itself instead of erroring. Falls
-// back to a clear "run `npm run login`" message when it can't self-heal.
-export async function buildContext(token = loadToken()) {
-  if (token) {
-    try {
-      return await bootstrapWith(token);
-    } catch (err) {
-      // Only re-login on an auth failure we can actually fix with credentials.
-      if (!isAuthError(err) || !hasCredentials()) {
-        if (isAuthError(err) && !hasCredentials()) {
-          throw new Error(
-            'Mizito session is invalid or expired. Run `npm run login`, or set ' +
-              'MIZITO_USERNAME/MIZITO_PASSWORD (or auth/credentials.json) for automatic re-login.',
-          );
-        }
-        throw err;
+// Bootstrap: identity + the account's workspaces. The default diskSession
+// provider reads the saved session and — when credentials are configured (env
+// MIZITO_USERNAME/MIZITO_PASSWORD or auth/credentials.json) — re-logs in
+// automatically on expiry, so a stale session heals itself instead of
+// erroring. Falls back to a clear "run `mizito login`" message otherwise.
+// Accepts a TokenProvider, a fixed token string, or nothing (diskSession).
+export async function buildContext(tokensOrToken?: TokenProvider | string): Promise<MizitoContext> {
+  const tokens =
+    typeof tokensOrToken === 'string'
+      ? staticToken(tokensOrToken)
+      : tokensOrToken ?? diskSession();
+  const root = createClient({ tokens });
+
+  let boot: Bootstrap;
+  try {
+    boot = await root.workspaces.bootstrap();
+  } catch (err) {
+    // 401/403 already got one onAuthExpired() retry inside the transport. An
+    // envelope rejection ('api') on the parameterless bootstrap is still
+    // worth one explicit heal attempt when the provider can re-login.
+    if (err instanceof MizitoApiError && err.code === 'api' && tokens.onAuthExpired) {
+      const fresh = await tokens.onAuthExpired();
+      if (fresh) {
+        boot = await root.workspaces.bootstrap();
+        return { tokens, token: await root.currentToken(), root, boot };
       }
-      console.error('[mizito] session expired — re-authenticating with stored credentials…');
     }
+    if (isAuthLikeError(err) && !hasCredentials()) {
+      throw new Error(
+        'Mizito session is invalid or expired. Run `mizito login`, or set ' +
+          'MIZITO_USERNAME/MIZITO_PASSWORD (or auth/credentials.json) for automatic re-login.',
+      );
+    }
+    throw err;
   }
-
-  if (!hasCredentials()) {
-    throw new Error(
-      'No Mizito session found. Run `npm run login` to sign in, or set ' +
-        'MIZITO_USERNAME/MIZITO_PASSWORD (or auth/credentials.json) for automatic login.',
-    );
-  }
-  const fresh = await reauthenticate(); // throws with a clear message on bad creds
-  return bootstrapWith(fresh.token);
+  return { tokens, token: await root.currentToken(), root, boot };
 }
 
 // A Mizito client scoped to one workspace descriptor `{_id, title, active}`.
 // Uses the base session token for the active workspace; switches for the rest.
-async function clientForWorkspace(root, baseToken, ws) {
-  if (ws.active) return createMizito({ token: baseToken });
-  const sw = await root.switchWorkspace(ws._id);
-  const token = tokenFromSwitch(sw);
+async function clientForWorkspace(root: MizitoClient, baseToken: string, ws: Workspace): Promise<MizitoClient> {
+  if (ws.active) return createClient({ token: baseToken });
+  const token = await root.workspaces.switchToken(ws._id);
   if (!token) throw new Error(`Could not switch into workspace "${ws.title}".`);
-  return createMizito({ token });
+  return createClient({ token });
 }
 
 // Resolve a single target workspace for a WRITE (default: the active one).
 // Returns a workspace-scoped client plus the workspace descriptor, so callers
 // know exactly where the mutation landed. Throws if a name/id was given but no
 // workspace matches (writes must not silently hit the wrong workspace).
-export async function resolveWorkspace(ctx, { workspace } = {}) {
+export async function resolveWorkspace(
+  ctx: MizitoContext,
+  { workspace }: { workspace?: string } = {},
+): Promise<{ mz: MizitoClient; ws: WorkspaceRef }> {
   const all = ctx.boot.workspaces ?? [];
-  let ws;
+  let ws: Workspace | undefined;
   if (!workspace) {
     ws = all.find((w) => w.active) ?? all[0];
   } else {
@@ -106,7 +113,7 @@ export async function resolveWorkspace(ctx, { workspace } = {}) {
 }
 
 // Pick which workspaces to read: all, or just the one matching id/title.
-function selectWorkspaces(boot, { workspace } = {}) {
+function selectWorkspaces(boot: Bootstrap, { workspace }: { workspace?: string } = {}): Workspace[] {
   const all = boot.workspaces ?? [];
   if (!workspace) return all;
   const needle = String(workspace).trim().toLowerCase();
@@ -116,19 +123,30 @@ function selectWorkspaces(boot, { workspace } = {}) {
   return hit.length ? hit : all;
 }
 
+interface PerWorkspaceResult<T> {
+  workspace: WorkspaceRef;
+  ok: boolean;
+  value?: T;
+  error?: string;
+}
+
 // Run `fn(mz, ws)` for each selected workspace, tolerating per-workspace failure
 // (one bad workspace shouldn't blank the whole result). Returns per-workspace
 // `{ workspace, ok, value?, error? }`.
-async function forEachWorkspace(ctx, opts, fn) {
+async function forEachWorkspace<T>(
+  ctx: MizitoContext,
+  opts: { workspace?: string },
+  fn: (mz: MizitoClient, ws: Workspace) => Promise<T>,
+): Promise<Array<PerWorkspaceResult<T>>> {
   const targets = selectWorkspaces(ctx.boot, opts);
-  const out = [];
+  const out: Array<PerWorkspaceResult<T>> = [];
   for (const ws of targets) {
-    const workspace = { id: ws._id, title: ws.title, active: !!ws.active };
+    const workspace: WorkspaceRef = { id: ws._id, title: ws.title, active: !!ws.active };
     try {
       const mz = await clientForWorkspace(ctx.root, ctx.token, ws);
       out.push({ workspace, ok: true, value: await fn(mz, ws) });
     } catch (err) {
-      out.push({ workspace, ok: false, error: String(err.message || err) });
+      out.push({ workspace, ok: false, error: String((err as Error).message || err) });
     }
   }
   return out;
@@ -137,7 +155,7 @@ async function forEachWorkspace(ctx, opts, fn) {
 // ---------------------------------------------------------------------------
 // Identity / workspaces
 // ---------------------------------------------------------------------------
-export function identity(ctx) {
+export function identity(ctx: MizitoContext) {
   const b = ctx.boot;
   return {
     uid: b.uid,
@@ -154,8 +172,8 @@ export function identity(ctx) {
 // ---------------------------------------------------------------------------
 // Overview — one cheap call, aggregated across all workspaces.
 // ---------------------------------------------------------------------------
-export async function overview(ctx) {
-  const summary = await ctx.root.dashboardSummary();
+export async function overview(ctx: MizitoContext) {
+  const summary = await ctx.root.dashboard.getAllSummary();
   const rows = Array.isArray(summary) ? summary : summary?.summary ?? [];
   return rows.map((s) => ({
     workspace: s.workspace_title,
@@ -175,14 +193,36 @@ export async function overview(ctx) {
 // ---------------------------------------------------------------------------
 // My tasks — the personal task feed per workspace, normalized.
 // ---------------------------------------------------------------------------
-function normalizeTask(t, projectTitles, ws, role) {
+export interface NormalizedTask {
+  id: string;
+  title: string;
+  role: 'assignee' | 'responsible';
+  notes: string;
+  workspace: string;
+  project: string | null;
+  progress: number;
+  completed: boolean;
+  has_deadline: boolean;
+  deadline: string | null;
+  has_attachments: boolean;
+  labels: number;
+  modified_at: string | null;
+  dialog: string | null;
+}
+
+function normalizeTask(
+  t: Task,
+  projectTitles: Map<string, string>,
+  ws: Workspace,
+  role: 'assignee' | 'responsible',
+): NormalizedTask {
   return {
     id: t._id,
     title: t.title,
     role, // 'assignee' or 'responsible' — why this is "my" task
     notes: t.notes ? String(t.notes).slice(0, 500) : '',
     workspace: ws.title,
-    project: projectTitles.get(t.project) ?? null,
+    project: (t.project && projectTitles.get(t.project)) ?? null,
     progress: t.progress ?? 0,
     completed: !!t.completed,
     has_deadline: !!t.has_deadline,
@@ -195,31 +235,38 @@ function normalizeTask(t, projectTitles, ws, role) {
 }
 
 // Does a task role field (assignee[] or responsible) reference me?
-function references(field, uid) {
+function references(field: Task['assignee'], uid: string): boolean {
   if (field === uid) return true;
-  const arr = Array.isArray(field) ? field : [field];
-  return arr.some((x) => x && (x === uid || x._id === uid || x.user === uid || x.uid === uid));
+  const arr: Array<TaskRoleRef | null | undefined> = Array.isArray(field) ? field : [field];
+  return arr.some(
+    (x) =>
+      x != null &&
+      (x === uid || (typeof x === 'object' && (x._id === uid || x.user === uid || x.uid === uid))),
+  );
 }
 
-export async function myTasks(ctx, { workspace, includeCompleted = false } = {}) {
+export async function myTasks(
+  ctx: MizitoContext,
+  { workspace, includeCompleted = false }: { workspace?: string; includeCompleted?: boolean } = {},
+) {
   const uid = ctx.boot.uid;
   const per = await forEachWorkspace(ctx, { workspace }, async (mz, ws) => {
     const [tasks, projects] = await Promise.all([
-      mz.allTasks().catch(() => []),
-      mz.projects().catch(() => null),
+      mz.tasks.getAll().catch(() => [] as Task[]),
+      mz.projects.getList().catch(() => null),
     ]);
-    const titles = new Map();
+    const titles = new Map<string, string>();
     for (const p of projects?.projects ?? []) titles.set(p._id, p.title);
     // "My task" = I'm an assignee, or I'm the single responsible person.
     // (tasks/getAll returns the whole workspace; we filter to my assignments.)
-    const list = [];
+    const list: NormalizedTask[] = [];
     for (const t of Array.isArray(tasks) ? tasks : []) {
       if (t.deleted) continue;
       if (!includeCompleted && t.completed) continue;
       const role = references(t.assignee, uid)
-        ? 'assignee'
+        ? ('assignee' as const)
         : references(t.responsible, uid)
-          ? 'responsible'
+          ? ('responsible' as const)
           : null;
       if (!role) continue;
       list.push(normalizeTask(t, titles, ws, role));
@@ -227,7 +274,7 @@ export async function myTasks(ctx, { workspace, includeCompleted = false } = {})
     return list;
   });
 
-  const tasks = per.flatMap((r) => (r.ok ? r.value : []));
+  const tasks = per.flatMap((r) => (r.ok && r.value ? r.value : []));
   // Open tasks with a deadline first (soonest first), then the rest by recency.
   tasks.sort((a, b) => {
     if (a.deadline && b.deadline) return a.deadline.localeCompare(b.deadline);
@@ -235,16 +282,21 @@ export async function myTasks(ctx, { workspace, includeCompleted = false } = {})
     if (b.deadline) return 1;
     return String(b.modified_at).localeCompare(String(a.modified_at));
   });
-  const errors = per.filter((r) => !r.ok).map((r) => ({ workspace: r.workspace.title, error: r.error }));
+  const errors = per
+    .filter((r) => !r.ok)
+    .map((r) => ({ workspace: r.workspace.title, error: r.error }));
   return { count: tasks.length, tasks, errors };
 }
 
 // ---------------------------------------------------------------------------
 // Unread messages — dialogs with unread messages per workspace.
 // ---------------------------------------------------------------------------
-export async function unreadMessages(ctx, { workspace } = {}) {
+export async function unreadMessages(
+  ctx: MizitoContext,
+  { workspace }: { workspace?: string } = {},
+) {
   const per = await forEachWorkspace(ctx, { workspace }, async (mz, ws) => {
-    const res = await mz.dialogs();
+    const res = await mz.chat.getDialogs();
     const dialogs = res?.dialogs ?? [];
     return dialogs
       .filter((d) => (d.unread_count ?? 0) > 0 || (d.history_unread_count ?? 0) > 0)
@@ -260,7 +312,7 @@ export async function unreadMessages(ctx, { workspace } = {}) {
       }));
   });
 
-  const conversations = per.flatMap((r) => (r.ok ? r.value : []));
+  const conversations = per.flatMap((r) => (r.ok && r.value ? r.value : []));
   conversations.sort((a, b) =>
     String(b.last_message_date).localeCompare(String(a.last_message_date)),
   );
@@ -268,6 +320,8 @@ export async function unreadMessages(ctx, { workspace } = {}) {
     (n, c) => n + (c.unread_count || c.history_unread_count || 0),
     0,
   );
-  const errors = per.filter((r) => !r.ok).map((r) => ({ workspace: r.workspace.title, error: r.error }));
+  const errors = per
+    .filter((r) => !r.ok)
+    .map((r) => ({ workspace: r.workspace.title, error: r.error }));
   return { conversations: conversations.length, total_unread, items: conversations, errors };
 }

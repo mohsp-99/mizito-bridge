@@ -1,8 +1,8 @@
-// Central configuration for the Mizito crawler.
+// Central configuration for the Mizito client library.
 // Values were derived by inspecting the office.mizito.ir SPA bundle:
 //   - the web app is served from office.mizito.ir (hash-routed SPA)
 //   - it talks to Config.App.api_url === https://app.mizito.ir
-//   - all data calls hit `${api_url}/capi/...`
+//   - data calls hit `${api_url}/api/...` (only login uses /capi/)
 //   - auth is a per-session token sent as the `x-token` request header,
 //     stored by the SPA in localStorage/sessionStorage under `token`.
 
@@ -22,19 +22,23 @@ export const API_BASE = 'https://app.mizito.ir';
 export const API_PREFIX = '/api';
 export const LOGIN_PREFIX = '/capi';
 
-// Headless login endpoint (password -> session token). See core/login.js.
+// Headless login endpoint (password -> session token). See auth/login.ts.
 export const SESSION_CREATE_URL = `${API_BASE}${LOGIN_PREFIX}/session/create`;
 
-// Header the SPA uses to authenticate every /capi call.
+// Attachments are served from this CDN path, addressed by a content token
+// (JWT) and authenticated with the same x-token header as the API.
+export const CDN_BASE = `${API_BASE}/cdn/`;
+
+// Header the SPA uses to authenticate every data call.
 export const TOKEN_HEADER = 'x-token';
 
-// On-disk layout.
+// On-disk layout (defaults; all hang off ROOT above).
 export const AUTH_DIR = path.join(ROOT, 'auth');
 export const DATA_DIR = path.join(ROOT, 'data');
 export const STORAGE_STATE_PATH = path.join(AUTH_DIR, 'storageState.json');
 export const SESSION_PATH = path.join(AUTH_DIR, 'session.json'); // { token, savedAt, user? }
 // Optional stored credentials for headless / automatic re-login. Gitignored
-// (the whole auth/ dir is). Env vars take precedence — see core/login.js.
+// (the whole auth/ dir is). Env vars take precedence — see auth/providers.ts.
 export const CREDENTIALS_PATH = path.join(AUTH_DIR, 'credentials.json'); // { username, password }
 
 // Default workspace to crawl. Set the WORKSPACE env var (or pass a name on the
