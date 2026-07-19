@@ -31,12 +31,40 @@ export interface FileUpload {
   sendAsFile?: boolean;
 }
 
+/** One entry of a write's `attachments` array — the media wrapper the API wants. */
+export interface AttachmentEntry {
+  /** Server-assigned on read; omit when posting. */
+  _id?: string;
+  media: UploadedDocument;
+  [key: string]: unknown;
+}
+
 // Options shared by writes that can carry attachments.
 export interface AttachmentOptions {
-  /** Already-uploaded documents (from uploadFile / client.content.upload). */
-  attachments?: UploadedDocument[];
+  /**
+   * Already-uploaded documents (from uploadFile / client.content.upload), or
+   * attachment entries read back off an existing task. Either shape is
+   * accepted; both are normalized to `{ media: document }` before sending.
+   */
+  attachments?: (UploadedDocument | AttachmentEntry)[];
   /** Files to upload (into the write's workspace) and attach in one call. */
   files?: FileUpload[];
+}
+
+// `content/upload` returns the media wrapper
+// `{_: 'messageMediaDocument', document: {...}}`, but a write's `attachments`
+// array wants that wrapper nested one level deeper, under `media` — verified
+// live against existing task attachments:
+//
+//   attachments: [ { _id: <server-assigned>, media: { _: 'messageMediaDocument',
+//                    document: { _id, name, size, content, content_key } } } ]
+//
+// Posting the bare upload result instead makes `tasks/newComment` return `false`
+// and silently store nothing, which is exactly what happened before this fix.
+function asAttachmentEntry(doc: UploadedDocument | AttachmentEntry): AttachmentEntry {
+  // Already an attachment entry (or a re-used one read back off a task).
+  if (doc && typeof doc === 'object' && 'media' in doc) return doc as AttachmentEntry;
+  return { media: doc as UploadedDocument };
 }
 
 // Upload each `files` entry via the given (workspace-scoped) client and return
@@ -44,18 +72,30 @@ export interface AttachmentOptions {
 async function collectAttachments(
   mz: MizitoClient,
   { attachments = [], files = [] }: AttachmentOptions,
-): Promise<UploadedDocument[]> {
-  const uploaded: UploadedDocument[] = [];
+): Promise<AttachmentEntry[]> {
+  const uploaded: AttachmentEntry[] = [];
   for (const f of files) {
-    uploaded.push(
-      await mz.content.upload(f.data, {
-        filename: f.filename,
-        maxWidthHeight: f.maxWidthHeight,
-        sendAsFile: f.sendAsFile,
-      }),
+    const doc = await mz.content.upload(f.data, {
+      filename: f.filename,
+      maxWidthHeight: f.maxWidthHeight,
+      sendAsFile: f.sendAsFile,
+    });
+    uploaded.push(asAttachmentEntry(doc));
+  }
+  return [...attachments.map(asAttachmentEntry), ...uploaded];
+}
+
+// These endpoints answer with a bare `true`/`false` JSON body rather than the
+// usual {status,data} envelope, so the transport passes it straight through and
+// a refusal reads as an ordinary result. Callers must check it: a write that
+// reports success it never confirmed is worse than one that throws.
+function assertWriteAccepted(res: unknown, what: string): void {
+  if (res === false || res === null || res === undefined) {
+    throw new Error(
+      `${what} was refused by Mizito (the API returned ${JSON.stringify(res)}). ` +
+        'Nothing was saved.',
     );
   }
-  return [...attachments, ...uploaded];
 }
 
 // Upload a file into a specific workspace and return the created document, so a
@@ -494,11 +534,12 @@ export async function commentOnTask(
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
   const task = await findTask(mz, { taskId, title: taskTitle });
   const attachmentDocs = await collectAttachments(mz, { attachments, files });
-  await mz.tasks.newComment({
+  const res = await mz.tasks.newComment({
     token: task.access_token as string,
     comment: hasText ? String(comment) : '',
     attachments: attachmentDocs,
   });
+  assertWriteAccepted(res, `Commenting on "${task.title}"`);
   return {
     workspace: ws.title,
     task_id: task._id,

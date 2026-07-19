@@ -164,6 +164,12 @@ export async function sendLetter(
   const toIds = resolveRecipients(members, to, ws.title);
   if (!toIds.length) throw new Error('At least one recipient (to) is required.');
 
+  // NOTE (unverified): task comments need each upload wrapped as
+  // `{ media: document }` — posting the bare upload result makes the API answer
+  // `false` and store nothing (see feeds/write.ts::asAttachmentEntry). Letters
+  // are a different module and their attachment shape has NOT been checked
+  // against a real letter, so this is left as-is rather than changed blind.
+  // Verify against an existing letter's `attachments` before trusting it.
   const attachmentDocs: UploadedDocument[] = [];
   for (const f of files) {
     attachmentDocs.push(
