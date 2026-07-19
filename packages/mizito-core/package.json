@@ -1,6 +1,6 @@
 {
   "name": "@mohsp-99/mizito-core",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "description": "Typed client library for the Mizito (office.mizito.ir) API — tasks, chat, letters, projects, workspaces. No browser, no server: log in with a saved session or credentials and call the API directly.",
   "license": "MIT",

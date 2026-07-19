@@ -1,6 +1,6 @@
 {
   "name": "@mohsp-99/mizito-mcp",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "description": "MCP server exposing your Mizito (office.mizito.ir) account to AI tools over stdio: read tasks/messages/letters AND create tasks, comment, and send messages — built on @mohsp-99/mizito-core.",
   "license": "MIT",
@@ -45,7 +45,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@mohsp-99/mizito-core": "^0.1.1",
+    "@mohsp-99/mizito-core": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.4.3"
   }
