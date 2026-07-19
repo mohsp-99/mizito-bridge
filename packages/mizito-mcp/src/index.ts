@@ -18,6 +18,8 @@
 //
 // Transport is stdio: the JSON-RPC protocol owns stdout, so this file must NEVER
 // write to stdout (use console.error / stderr for diagnostics only).
+import { readFile } from 'node:fs/promises';
+import { basename } from 'node:path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
@@ -46,7 +48,7 @@ import {
   readConversation,
   messageUser,
 } from '@mohsp-99/mizito-core';
-import type { MizitoContext } from '@mohsp-99/mizito-core';
+import type { MizitoContext, FileUpload } from '@mohsp-99/mizito-core';
 
 interface ToolResult {
   [key: string]: unknown;
@@ -71,6 +73,24 @@ function failure(err: unknown): ToolResult {
 // Every tool starts from a fresh context (a cheap `workspace/userId` bootstrap)
 // so workspace tokens are always current — the server process is long-lived and
 // cached tokens would eventually expire.
+// Read local paths into the FileUpload shape the core write helpers expect.
+// MCP arguments are JSON, so a file can only be named by path — the bytes are
+// read here, on the machine hosting the server.
+async function readFileUploads(paths?: string[]): Promise<FileUpload[]> {
+  if (!paths?.length) return [];
+  const out: FileUpload[] = [];
+  for (const p of paths) {
+    let data: Buffer;
+    try {
+      data = await readFile(p);
+    } catch (err) {
+      throw new Error(`Could not read "${p}": ${(err as Error)?.message ?? err}`);
+    }
+    out.push({ data: new Uint8Array(data), filename: basename(p), sendAsFile: true });
+  }
+  return out;
+}
+
 async function withContext(run: (ctx: MizitoContext) => unknown): Promise<ToolResult> {
   try {
     const ctx = await buildContext();
@@ -454,16 +474,28 @@ server.registerTool(
   {
     title: 'Comment on a Mizito task',
     description:
-      'Add a comment to a task\'s discussion thread. WRITES to your account. Identify ' +
-      'the task by task_id (preferred) or task_title (must match exactly one task in ' +
-      'the workspace). Returns the task it commented on.',
+      'Add a comment to a task\'s discussion thread, optionally with file attachments. ' +
+      'WRITES to your account. Identify the task by task_id (preferred) or task_title ' +
+      '(must match exactly one task in the workspace). Pass `files` as absolute paths ' +
+      'on this machine to upload and attach them in the same comment. Returns the task ' +
+      'it commented on and how many attachments were stored.',
     inputSchema: {
-      comment: z.string().describe('The comment text (required).'),
+      comment: z
+        .string()
+        .optional()
+        .describe('The comment text. Optional only when `files` is non-empty.'),
       task_id: z.string().optional().describe('The task id (from mizito_my_tasks).'),
       task_title: z
         .string()
         .optional()
         .describe('The task title, if you do not have the id. Must match exactly one task.'),
+      files: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Absolute paths of local files to upload and attach to this comment. ' +
+            'Each is read from disk and uploaded; the filename is taken from the path.',
+        ),
       workspace: z
         .string()
         .optional()
@@ -471,12 +503,13 @@ server.registerTool(
     },
   },
   (args) =>
-    withContext((ctx) =>
+    withContext(async (ctx) =>
       commentOnTask(ctx, {
         workspace: args?.workspace,
         taskId: args?.task_id,
         taskTitle: args?.task_title,
-        comment: args?.comment,
+        comment: args?.comment ?? '',
+        files: await readFileUploads(args?.files),
       }),
     ),
 );

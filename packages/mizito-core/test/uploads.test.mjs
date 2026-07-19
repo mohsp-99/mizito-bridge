@@ -104,10 +104,29 @@ test('createTask uploads files and threads the documents into attachments', asyn
     files: [{ data: new Uint8Array([1, 2]), filename: 'a.txt' }],
   });
   assert.equal(res.created, true);
-  // pre-uploaded doc first, then the freshly uploaded one
+  // pre-uploaded doc first, then the freshly uploaded one — each nested under
+  // `media`, which is the shape the API actually stores. Verified live against
+  // an existing task's attachments; posting the bare document instead makes
+  // tasks/newComment answer `false` and save nothing.
   assert.equal(addPayload.attachments.length, 2);
-  assert.equal(addPayload.attachments[0]._id, 'pre-1');
-  assert.equal(addPayload.attachments[1]._id, 'up-1');
+  assert.equal(addPayload.attachments[0].media._id, 'pre-1');
+  assert.equal(addPayload.attachments[1].media._id, 'up-1');
+});
+
+test('an already-wrapped attachment entry is not double-wrapped', async () => {
+  // Attachments read back off an existing task already carry `media`; re-using
+  // one must not produce media.media.
+  const { buildContext, createTask } = await import('@mohsp-99/mizito-core');
+  let addPayload;
+  mockWorkspace({ onAdd: (b) => { addPayload = b; } });
+  const ctx = await buildContext(staticToken('t'));
+  await createTask(ctx, {
+    title: 'Re-used attachment',
+    attachments: [{ _id: 'att-1', media: { _id: 'doc-1', name: 'existing' } }],
+  });
+  assert.equal(addPayload.attachments.length, 1);
+  assert.equal(addPayload.attachments[0].media._id, 'doc-1');
+  assert.equal(addPayload.attachments[0].media.media, undefined);
 });
 
 test('uploadFile returns the created document scoped to the workspace', async () => {

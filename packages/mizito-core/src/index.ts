@@ -65,7 +65,7 @@ export {
   downloadAttachment,
   uploadFile,
 } from './feeds/write.js';
-export type { CreateTaskInput, EditTaskInput, FileUpload, AttachmentOptions } from './feeds/write.js';
+export type { CreateTaskInput, EditTaskInput, FileUpload, AttachmentOptions, AttachmentEntry } from './feeds/write.js';
 
 // Letters / correspondence (read + write).
 export {
