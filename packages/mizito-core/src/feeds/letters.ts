@@ -14,12 +14,52 @@
 // docs/API_NOTES.md).
 import { resolveWorkspace } from './index.js';
 import type { MizitoContext } from './index.js';
-import { loadMembers, findByName, fullName, attachmentOf } from './write.js';
-import type { AttachmentOptions } from './write.js';
+import { loadMembers, findByName, fullName, attachmentOf, asMediaWrapper, assertWriteAccepted } from './write.js';
+import type { AttachmentOptions, MediaWrapper } from './write.js';
+import type { MizitoClient } from '../client.js';
 import { stripHtml } from '../util.js';
-import type { Attachment, Member, UploadedDocument } from '../types/index.js';
+import type { Attachment, Member } from '../types/index.js';
 
 const MAILBOXES = new Set(['inbox', 'outbox', 'archive']);
+
+// Upload each `files` entry and return the full attachment list in the shape a
+// letter wants: the bare `{_: 'messageMediaDocument', document}` wrapper, with
+// NO `media` layer. This is the mirror image of feeds/write.ts::collectAttachments
+// (tasks nest the same wrapper under `media`) — verified live against
+// inbox/getHistory on several letters, at both thread and reply level.
+//
+// Pre-supplied `attachments` go through asMediaWrapper too: AttachmentOptions is
+// shared with the task writes and documents that either shape is accepted, so a
+// caller may well hand us an entry read back off a task. Spreading those in raw
+// is what would have posted a task-shaped `{_id, media}` into a letter.
+async function collectLetterAttachments(
+  mz: MizitoClient,
+  { attachments = [], files = [] }: AttachmentOptions,
+): Promise<MediaWrapper[]> {
+  const uploaded: MediaWrapper[] = [];
+  for (const f of files) {
+    const doc = await mz.content.upload(f.data, {
+      filename: f.filename,
+      maxWidthHeight: f.maxWidthHeight,
+      sendAsFile: f.sendAsFile,
+    });
+    uploaded.push(asMediaWrapper(doc));
+  }
+  return [...attachments.map(asMediaWrapper), ...uploaded];
+}
+
+// `inbox/send` has never been exercised live, so its success shape is unknown —
+// the SPA bundle shows the response used as an object. Reject only what is
+// unambiguously a refusal (a bare `false`/null, or an { error } body) rather
+// than inventing a success predicate we cannot verify. This at least closes the
+// hole the task comments fell through, where a bare `false` read as success.
+function assertLetterAccepted(res: unknown, what: string): void {
+  assertWriteAccepted(res, what);
+  const err = (res as { error?: unknown; msg?: string } | null)?.error;
+  if (err) {
+    throw new Error(`${what} was rejected by Mizito: ${(res as { msg?: string }).msg ?? String(err)}`);
+  }
+}
 
 const nameOf = (map: Map<string, string>, id: string | null | undefined): string | null =>
   id ? map.get(id) || id : null;
@@ -164,37 +204,31 @@ export async function sendLetter(
   const toIds = resolveRecipients(members, to, ws.title);
   if (!toIds.length) throw new Error('At least one recipient (to) is required.');
 
-  // NOTE (unverified): task comments need each upload wrapped as
-  // `{ media: document }` — posting the bare upload result makes the API answer
-  // `false` and store nothing (see feeds/write.ts::asAttachmentEntry). Letters
-  // are a different module and their attachment shape has NOT been checked
-  // against a real letter, so this is left as-is rather than changed blind.
-  // Verify against an existing letter's `attachments` before trusting it.
-  const attachmentDocs: UploadedDocument[] = [];
-  for (const f of files) {
-    attachmentDocs.push(
-      await mz.content.upload(f.data, {
-        filename: f.filename,
-        maxWidthHeight: f.maxWidthHeight,
-        sendAsFile: f.sendAsFile,
-      }),
-    );
-  }
+  // Letters take the bare media wrapper, NOT the `media`-nested entry tasks use
+  // (see collectLetterAttachments).
+  const attachmentDocs = await collectLetterAttachments(mz, { attachments, files });
 
   const body = {
     to: toIds,
     subject: String(subject),
     content: String(content),
-    attachments: [...attachments, ...attachmentDocs],
+    attachments: attachmentDocs,
     tasks_insert_to_chat_groups: [],
     labels: labels ?? [],
   };
   const res = (await mz.letters.send(body)) as { thread?: string; _id?: string } | null;
+  assertLetterAccepted(res, `Sending "${body.subject}"`);
+  // Verified live 2026-07-20: the send response carries neither `thread` nor
+  // `_id`, so `thread` below is normally null. To find the letter afterwards,
+  // list the outbox (newest first) — see listLetters({box:'outbox'}).
   return {
     workspace: ws.title,
+    // Not refused — see assertLetterAccepted. That is weaker than confirmed
+    // delivery: the endpoint gives us nothing to confirm against.
     sent: true,
     recipients: toIds.length,
     subject: body.subject,
+    attachments: attachmentDocs.length,
     thread: res?.thread || res?._id || null,
   };
 }
@@ -208,7 +242,13 @@ export async function sendLetter(
 // ---------------------------------------------------------------------------
 export async function replyLetter(
   ctx: MizitoContext,
-  { workspace, thread, content }: { workspace?: string; thread: string; content: string },
+  {
+    workspace,
+    thread,
+    content,
+    attachments = [],
+    files = [],
+  }: { workspace?: string; thread: string; content: string } & AttachmentOptions,
 ) {
   if (!thread || !String(thread).trim()) throw new Error('thread is required.');
   if (!content || !String(content).trim()) throw new Error('content is required.');
@@ -225,17 +265,25 @@ export async function replyLetter(
   participants.delete(me);
   const toIds = [...participants];
 
+  const attachmentDocs = await collectLetterAttachments(mz, { attachments, files });
   const body = {
     thread,
     to: toIds,
     subject: letter.subject || '',
     content: String(content),
-    attachments: [],
+    attachments: attachmentDocs,
     tasks_insert_to_chat_groups: [],
     labels: [],
   };
-  await mz.letters.send(body);
-  return { workspace: ws.title, thread, recipients: toIds.length, replied: true };
+  const res = await mz.letters.send(body);
+  assertLetterAccepted(res, `Replying to "${body.subject}"`);
+  return {
+    workspace: ws.title,
+    thread,
+    recipients: toIds.length,
+    attachments: attachmentDocs.length,
+    replied: true,
+  };
 }
 
 // ---------------------------------------------------------------------------

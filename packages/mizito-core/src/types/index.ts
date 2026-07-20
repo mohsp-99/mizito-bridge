@@ -123,10 +123,13 @@ export interface Attachment {
 }
 
 /**
- * The document object returned by `content/upload`. It mirrors DocumentNode
- * (so it drops straight into an `attachments: []` array on a task, comment, or
- * letter) but the exact field set is only what the upload endpoint echoes back;
- * recovered from the bundle, not yet exercised live.
+ * A document node — the inner payload of a `messageMediaDocument` wrapper, as it
+ * appears inside task, comment, and letter attachments.
+ *
+ * NOTE: `content/upload` does NOT return this directly — it returns the
+ * {@link MediaWrapper} around it. (Verified live; the docs previously claimed
+ * otherwise.) Use the feed-layer helpers to build attachment payloads rather
+ * than assembling either shape by hand.
  */
 export interface UploadedDocument {
   _id: string;
@@ -136,6 +139,18 @@ export interface UploadedDocument {
   content_key?: string | null;
   /** Set on some renditions (images uploaded as photos rather than files). */
   is_image?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * The `messageMediaDocument` wrapper around an uploaded document — what
+ * `content/upload` actually answers with, and the exact entry a LETTER's
+ * `attachments: []` array wants. Task attachments nest this one level deeper,
+ * under `media` (see AttachmentEntry in feeds/write.ts). Verified live.
+ */
+export interface MediaWrapper {
+  _: 'messageMediaDocument';
+  document: UploadedDocument;
   [key: string]: unknown;
 }
 

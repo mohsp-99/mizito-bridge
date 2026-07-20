@@ -7,16 +7,19 @@
 //   maxWidthHeight — optional image resize cap
 //   sendAsFile     — "true" to keep a file as a document, "false" to treat an
 //                    image as an inline photo
-// The response is the uploaded document object; its shape mirrors the document
-// nodes already seen on attachments (`_id, name, size, content, content_key`),
-// so it can be threaded straight into a task/comment/letter `attachments` array
-// or a chat photo/document message. Verified from the bundle; not yet exercised
-// live from this library.
+// The response is the `messageMediaDocument` **wrapper** around the uploaded
+// document — `{_:'messageMediaDocument', document:{_id, name, size, content,
+// content_key}}` — NOT the bare document, which is what this file and the
+// `UploadedDocument` type used to claim. Verified live 2026-07-20.
+//
+// That wrapper is exactly what a LETTER's `attachments: []` array wants; task
+// attachments nest it one level deeper under `media`. Don't assemble either by
+// hand — the feed layer (feeds/write.ts) normalizes both shapes.
 import { UPLOAD_URL, TOKEN_HEADER } from '../config.js';
 import { MizitoApiError } from '../transport/errors.js';
 import type { CallFn } from '../transport/http.js';
 import type { Http } from '../transport/http.js';
-import type { UploadedDocument } from '../types/index.js';
+import type { MediaWrapper } from '../types/index.js';
 
 export interface UploadOptions {
   /** Filename to send (defaults to the File's name, or "upload"). */
@@ -36,11 +39,12 @@ export type UploadInput = Blob | Uint8Array | ArrayBuffer;
 export function contentResource(http: Http, call: CallFn) {
   return {
     /**
-     * Upload a file and return the created document. Pass the bytes as a Blob
-     * (browser/File), a Uint8Array, or an ArrayBuffer. The returned document
-     * goes into a write's `attachments` (see feeds/write.ts helpers).
+     * Upload a file and return the created `messageMediaDocument` wrapper (the
+     * document itself is at `.document`). Pass the bytes as a Blob
+     * (browser/File), a Uint8Array, or an ArrayBuffer. Feed it to the
+     * feeds/write.ts helpers to build a write's `attachments` entry.
      */
-    async upload(input: UploadInput, opts: UploadOptions = {}): Promise<UploadedDocument> {
+    async upload(input: UploadInput, opts: UploadOptions = {}): Promise<MediaWrapper> {
       const blob =
         input instanceof Blob
           ? input
@@ -91,9 +95,9 @@ export function contentResource(http: Http, call: CallFn) {
           body: json,
         });
       }
-      // The upload endpoint answers with the document directly (not the
+      // The upload endpoint answers with the media wrapper directly (not the
       // {status,data} envelope); an { error, msg } object signals failure.
-      const doc = json as UploadedDocument & { error?: boolean; msg?: string };
+      const doc = json as MediaWrapper & { error?: boolean; msg?: string };
       if (doc?.error) {
         throw new MizitoApiError(`Upload rejected: ${doc.msg ?? 'unknown error'}`, {
           code: 'api',

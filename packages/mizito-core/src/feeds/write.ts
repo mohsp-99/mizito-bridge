@@ -19,7 +19,7 @@ import { taskFromMessage, CHAT_PAGE_SIZE } from '../resources/chat.js';
 import { ROOT } from '../config.js';
 import { ensureDir, slug } from '../util.js';
 import type { UploadInput } from '../resources/content.js';
-import type { Attachment, KanbanBoard, Member, Project, Task, UploadedDocument } from '../types/index.js';
+import type { Attachment, KanbanBoard, MediaWrapper, Member, Project, Task, UploadedDocument } from '../types/index.js';
 
 // --- attachments (the write-half of files) -------------------------------
 // A file to upload as part of a write. `data` is the bytes (Blob/File,
@@ -31,11 +31,13 @@ export interface FileUpload {
   sendAsFile?: boolean;
 }
 
-/** One entry of a write's `attachments` array — the media wrapper the API wants. */
+export type { MediaWrapper } from '../types/index.js';
+
+/** One entry of a TASK write's `attachments` array — the wrapper under `media`. */
 export interface AttachmentEntry {
   /** Server-assigned on read; omit when posting. */
   _id?: string;
-  media: UploadedDocument;
+  media: MediaWrapper;
   [key: string]: unknown;
 }
 
@@ -43,28 +45,69 @@ export interface AttachmentEntry {
 export interface AttachmentOptions {
   /**
    * Already-uploaded documents (from uploadFile / client.content.upload), or
-   * attachment entries read back off an existing task. Either shape is
-   * accepted; both are normalized to `{ media: document }` before sending.
+   * attachment entries read back off an existing task or letter. Any shape is
+   * accepted: each is normalized to whatever the target module wants — nested
+   * under `media` for tasks, the bare media wrapper for letters.
    */
   attachments?: (UploadedDocument | AttachmentEntry)[];
   /** Files to upload (into the write's workspace) and attach in one call. */
   files?: FileUpload[];
 }
 
-// `content/upload` returns the media wrapper
-// `{_: 'messageMediaDocument', document: {...}}`, but a write's `attachments`
-// array wants that wrapper nested one level deeper, under `media` — verified
-// live against existing task attachments:
+// Attachments travel in two different shapes and the API is strict about which
+// one each module wants. Both were read off live data:
 //
-//   attachments: [ { _id: <server-assigned>, media: { _: 'messageMediaDocument',
-//                    document: { _id, name, size, content, content_key } } } ]
+//   TASK    (tasks/getAll, tasks/getComments)
+//     { _id: <server-assigned>, media: { _: 'messageMediaDocument',
+//                                        document: { _id, name, size, content, content_key } } }
+//   LETTER  (inbox/getHistory, thread- and reply-level alike)
+//     { _: 'messageMediaDocument', document: { ... } }        <-- no `media` layer
 //
-// Posting the bare upload result instead makes `tasks/newComment` return `false`
-// and silently store nothing, which is exactly what happened before this fix.
-function asAttachmentEntry(doc: UploadedDocument | AttachmentEntry): AttachmentEntry {
-  // Already an attachment entry (or a re-used one read back off a task).
-  if (doc && typeof doc === 'object' && 'media' in doc) return doc as AttachmentEntry;
-  return { media: doc as UploadedDocument };
+// Posting the wrong one is silent: `tasks/newComment` answers `false` and stores
+// nothing rather than erroring.
+//
+// `content/upload` returns the media wrapper (verified live 2026-07-20), so the
+// task path needs one more `media` layer and the letter path needs none. Rather
+// than depend on that, `documentOf` digs the document out of whatever it is
+// handed and the builders below rebuild the exact target shape — which also
+// normalizes an attachment re-used across modules (read off a task, sent on a
+// letter, or vice versa).
+const MEDIA_DOCUMENT = 'messageMediaDocument';
+
+// Peel `media` / `document` layers off until the document itself is reached.
+// Returns null when there is no recognizable document (caller decides how loud
+// to be about it).
+function documentOf(a: unknown): UploadedDocument | null {
+  if (!a || typeof a !== 'object') return null;
+  const node = a as { media?: unknown; document?: unknown; _id?: string };
+  if (node.media) return documentOf(node.media); // task entry: { _id?, media }
+  if (node.document) return documentOf(node.document); // wrapper: { _, document }
+  return node._id ? (node as UploadedDocument) : null; // bare document
+}
+
+function requireDocument(a: unknown, kind: string): UploadedDocument {
+  const doc = documentOf(a);
+  if (!doc) {
+    throw new Error(
+      `Cannot read a document out of this ${kind}: ${JSON.stringify(a)}. ` +
+        'Expected an uploaded document, a { _: \'messageMediaDocument\', document } wrapper, ' +
+        'or an attachment entry read off an existing task/letter.',
+    );
+  }
+  return doc;
+}
+
+/**
+ * The shape a LETTER's `attachments` array wants — the bare media wrapper.
+ * Used by feeds/letters.ts; letters do NOT take the `media` layer tasks use.
+ */
+export function asMediaWrapper(doc: UploadedDocument | AttachmentEntry | MediaWrapper): MediaWrapper {
+  return { _: MEDIA_DOCUMENT, document: requireDocument(doc, 'attachment') };
+}
+
+/** The shape a TASK write's `attachments` array wants — the wrapper under `media`. */
+function asAttachmentEntry(doc: UploadedDocument | AttachmentEntry | MediaWrapper): AttachmentEntry {
+  return { media: asMediaWrapper(doc) };
 }
 
 // Upload each `files` entry via the given (workspace-scoped) client and return
@@ -89,7 +132,7 @@ async function collectAttachments(
 // usual {status,data} envelope, so the transport passes it straight through and
 // a refusal reads as an ordinary result. Callers must check it: a write that
 // reports success it never confirmed is worse than one that throws.
-function assertWriteAccepted(res: unknown, what: string): void {
+export function assertWriteAccepted(res: unknown, what: string): void {
   if (res === false || res === null || res === undefined) {
     throw new Error(
       `${what} was refused by Mizito (the API returned ${JSON.stringify(res)}). ` +
@@ -98,9 +141,11 @@ function assertWriteAccepted(res: unknown, what: string): void {
   }
 }
 
-// Upload a file into a specific workspace and return the created document, so a
-// caller can attach it to a later write. The workspace scoping matters: content
-// tokens are workspace-scoped (see downloadAttachment).
+// Upload a file into a specific workspace and return the created media wrapper
+// (the document itself is at `.document`), so a caller can attach it to a later
+// write — pass it straight back as an `attachments` entry and the helpers above
+// will reshape it for whichever module it is going to. The workspace scoping
+// matters: content tokens are workspace-scoped (see downloadAttachment).
 export async function uploadFile(
   ctx: MizitoContext,
   {
@@ -110,7 +155,7 @@ export async function uploadFile(
     maxWidthHeight,
     sendAsFile,
   }: { workspace?: string; data: UploadInput; filename?: string; maxWidthHeight?: number; sendAsFile?: boolean },
-): Promise<{ workspace: string; document: UploadedDocument }> {
+): Promise<{ workspace: string; document: MediaWrapper }> {
   if (data == null) throw new Error('data (the file bytes) is required.');
   const { mz, ws } = await resolveWorkspace(ctx, { workspace });
   const document = await mz.content.upload(data, { filename, maxWidthHeight, sendAsFile });
@@ -130,18 +175,13 @@ const boardTitle = (b: KanbanBoard | string | null | undefined): string =>
 export const fullName = (u: Member | null | undefined): string =>
   `${u?.first_name ?? ''} ${u?.last_name ?? ''}`.trim();
 
-// Normalize a Mizito document attachment node (on comments / task messages) to
-// { id, name, size, content_token, content_key }. The `content_token` is the JWT
-// used to download the file from the CDN. Handles the couple of shapes it appears
-// in (`{media:{document}}`, `{document}`, or a bare document object).
+// Normalize a Mizito document attachment node (on comments / task messages /
+// letters) to { id, name, size, content_token, content_key }. The `content_token`
+// is the JWT used to download the file from the CDN. `documentOf` handles every
+// shape it appears in — task entries (`{media:{document}}`), letter wrappers
+// (`{document}`), and bare document objects.
 export function attachmentOf(a: unknown): Attachment | null {
-  const node = a as
-    | { media?: { document?: Record<string, unknown> }; document?: Record<string, unknown>; _id?: string; content?: unknown }
-    | null
-    | undefined;
-  const d = (node?.media?.document || node?.document || (node?._id && node?.content ? node : null)) as
-    | { _id?: string; name?: string; size?: number | null; content?: string | null; content_key?: string | null }
-    | null;
+  const d = documentOf(a);
   if (!d?._id) return null;
   return {
     id: d._id,

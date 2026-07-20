@@ -625,12 +625,20 @@ server.registerTool(
     description:
       "Send a formal letter via Mizito's correspondence module (not chat). WRITES to your " +
       'account. Give recipients (to: member names or ids), a subject, and content. Use ' +
-      'mizito_whoami / a workspace\'s members to find names. Returns the sent letter\'s ' +
-      'thread id.',
+      'mizito_whoami / a workspace\'s members to find names. Attach files with `files`. ' +
+      "Mizito's send endpoint returns no thread id, so `thread` is normally null — " +
+      'use mizito_letters with box:"outbox" to find the sent letter.',
     inputSchema: {
       to: z.array(z.string()).describe('Recipient member names or ids (at least one).'),
       subject: z.string().describe('The letter subject (required).'),
       content: z.string().describe('The letter body (required; plain text or HTML).'),
+      files: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Absolute paths of local files to upload and attach to this letter. ' +
+            'Each is read from disk and uploaded; the filename is taken from the path.',
+        ),
       workspace: z
         .string()
         .optional()
@@ -638,12 +646,13 @@ server.registerTool(
     },
   },
   (args) =>
-    withContext((ctx) =>
+    withContext(async (ctx) =>
       sendLetter(ctx, {
         workspace: args?.workspace,
         to: args?.to,
         subject: args?.subject,
         content: args?.content,
+        files: await readFileUploads(args?.files),
       }),
     ),
 );
@@ -655,10 +664,17 @@ server.registerTool(
     description:
       'Reply within an existing letter thread. WRITES to your account. Identify the thread ' +
       'by its id (from mizito_letters / mizito_read_letter). The reply is addressed to the ' +
-      "thread's participants automatically. Returns the thread id.",
+      "thread's participants automatically. Attach files with `files`. Returns the thread id.",
     inputSchema: {
       thread: z.string().describe('The letter thread id (from mizito_letters).'),
       content: z.string().describe('The reply body (required).'),
+      files: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'Absolute paths of local files to upload and attach to this reply. ' +
+            'Each is read from disk and uploaded; the filename is taken from the path.',
+        ),
       workspace: z
         .string()
         .optional()
@@ -666,8 +682,13 @@ server.registerTool(
     },
   },
   (args) =>
-    withContext((ctx) =>
-      replyLetter(ctx, { workspace: args?.workspace, thread: args?.thread, content: args?.content }),
+    withContext(async (ctx) =>
+      replyLetter(ctx, {
+        workspace: args?.workspace,
+        thread: args?.thread,
+        content: args?.content,
+        files: await readFileUploads(args?.files),
+      }),
     ),
 );
 

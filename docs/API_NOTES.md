@@ -187,7 +187,7 @@ task/chat writes). All `POST`, act on the active/scoped workspace.
 
 | Endpoint | Payload | Notes |
 | --- | --- | --- |
-| `inbox/send` | compose model `{to:[uid], subject, content(HTML), attachments:[], tasks_insert_to_chat_groups:[], labels:[]}`; add `{thread}` to reply within a thread | The SPA rejects an empty `to`. In the UI `to` is an array of user objects mapped to ids before sending. |
+| `inbox/send` | compose model `{to:[uid], subject, content(HTML), attachments:[], tasks_insert_to_chat_groups:[], labels:[]}`; add `{thread}` to reply within a thread | The SPA rejects an empty `to`. In the UI `to` is an array of user objects mapped to ids before sending. `attachments` entries are the **bare** `{_:'messageMediaDocument', document}` wrapper (see Files/attachments) — **not** the task `{_id, media}` shape. **Verified live 2026-07-20** (send with attachment → read back → download). The response does **not** carry `thread` or `_id`, so `sendLetter` returns `thread: null` — find the new thread via `inbox/getInbox {mode:'outbox'}` (newest first). `feeds/letters.ts` rejects a bare `false`/`{error}` but cannot confirm more than "not refused". |
 | `inbox/seen` | `{thread}` | Mark a letter thread read. |
 | `inbox/archive` / `inbox/archive/sender` | `{thread}` | Archive; the `.sender` variant is for **sent** (outbox) letters. (In the bundle the literal is `inbox.archive.sender`; dots map to slashes in the URL — see below.) |
 | `inbox/unArchive` / `inbox/unArchive/sender` | `{thread}` | Unarchive (received / sent). |
@@ -236,9 +236,27 @@ Wrapped in `packages/mizito-core/src/resources/chat.ts` (`getChatView`, `search`
 ## Files / attachments
 
 Attachments appear as `messageMediaDocument` objects (on task messages, task
-`attachments`, and comment `attachments`). Each `document` has `name`, `size`,
+`attachments`, comment `attachments`, and letters). Each `document` has `name`, `size`,
 `content_key`, and a `content` JWT (payload: `{content:<fileId>, auth:{workspace},
 timestamp}`).
+
+### Two attachment shapes — tasks vs letters (**verified live**)
+
+The wrapper is the same; how deep it sits is **not**, and the API is strict about it:
+
+| Module | Read from | `attachments[]` entry |
+| --- | --- | --- |
+| Tasks / comments | `tasks/getAll`, `tasks/getComments` | `{_id:<server>, media:{_:'messageMediaDocument', document:{…}}}` |
+| Letters | `inbox/getHistory` (thread **and** reply level) | `{_:'messageMediaDocument', document:{…}}` — **no `media` layer** |
+
+Posting the wrong shape fails **silently**: `tasks/newComment` answers a bare `false`
+outside the `{status,data}` envelope and stores nothing. Letters were long assumed to
+share the task shape; they do not.
+
+`feeds/write.ts` normalizes both: `documentOf()` peels `media`/`document` layers off
+whatever it is given, then `asAttachmentEntry()` (tasks) / `asMediaWrapper()` (letters)
+rebuild the target shape. This also makes an attachment re-used across modules — read off
+a task, sent on a letter — come out right.
 
 Download (**verified**, GET): `https://app.mizito.ir/cdn/<content-token>`.
 
@@ -263,13 +281,28 @@ Download (**verified**, GET): `https://app.mizito.ir/cdn/<content-token>`.
 | `maxWidthHeight` | optional — cap the longest image side (server-side resize) |
 | `sendAsFile` | `"true"` to keep a file/document, `"false"` to treat an image as an inline photo |
 
-The response is the **document object** (mirrors the `document` nodes on attachments:
-`_id, name, size, content, content_key`), which is then pushed into a task/comment/letter
-`attachments: []` array or a chat photo/document message's media. Wrapped in
-`resources/content.ts` (`upload`, `getDownloadLink`, `getCroppedPhoto`); the feed layer
-(`feeds/write.ts`) adds `uploadFile()` and an `attachments`/`files` option on
-`createTask` / `commentOnTask` / `sendLetter` that uploads and threads the document in one
-call. Recovered from the bundle; **not yet exercised live.**
+The response (**verified live 2026-07-20**) is the `messageMediaDocument` **wrapper**, not
+the bare document — earlier notes here and in `content.ts` had this wrong:
+
+```jsonc
+{ "_": "messageMediaDocument",
+  "document": { "_id": "...", "name": "quote_sheet_v1_EXAMPLE.pdf",
+                "size": 264575, "content": "<jwt>", "content_key": "..." } }
+```
+
+So it drops into a **letter**'s `attachments: []` as-is, and needs one more `media` layer
+for a **task**. A fresh upload's `content` JWT is user-scoped (`auth:{user}`); once
+attached it is re-issued workspace-scoped (`auth:{workspace}`).
+
+Wrapped in `resources/content.ts` (`upload`, `getDownloadLink`, `getCroppedPhoto`); the
+feed layer (`feeds/write.ts`) adds `uploadFile()` and an `attachments`/`files` option on
+`createTask` / `commentOnTask` / `sendLetter` / `replyLetter` that uploads and threads the
+document in one call. Prefer those over hand-assembling either shape — `documentOf()`
+accepts any of them and rebuilds whichever the target module needs.
+
+**End-to-end verified** (`sendLetter` with `files:`, 2026-07-20): upload → letter →
+`inbox/getHistory` read-back → CDN download returned the identical 264,575-byte PDF
+(sha256 match).
 
 ## No reactions
 
